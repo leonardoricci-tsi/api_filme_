@@ -1,0 +1,61 @@
+<div class="filme-card">
+  @if (posterUrl) {
+    <img [src]="posterUrl" [alt]="titulo" />
+  } @else {
+    <div class="poster-vazio">Sem pôster</div>
+  }
+
+  <div class="conteudo">
+    <h3>{{ titulo }}</h3>
+    @if (sinopse) {
+      <p class="sinopse">{{ sinopse }}</p>
+    }
+
+    <div class="acoes">
+      <button (click)="toggleFavorito.emit()" [class.favorito-ativo]="isFavorito">
+        {{ isFavorito ? '★ Favoritado' : '☆ Favoritar' }}
+      </button>
+      <button class="btn-secundario" (click)="abrirComentarios()">Comentários</button>
+    </div>
+  </div>
+</div>
+
+<dialog #dialogComentarios class="dialog-comentarios">
+  <h3>{{ titulo }}</h3>
+
+  @if (sucesso()) {
+    <p class="sucesso">✓ {{ sucesso() }}</p>
+  }
+
+  @if (erro()) {
+    <p class="erro">{{ erro() }}</p>
+  }
+
+  @if (carregandoComentarios()) {
+    <p>Carregando...</p>
+  } @else {
+    <ul class="lista-comentarios">
+      @for (comentario of comentarios(); track comentario.id) {
+        <li>
+          <span>{{ comentario.texto }}</span>
+          <button class="btn-remover" (click)="removerComentario(comentario.id)">x</button>
+        </li>
+      } @empty {
+        <li class="vazio">Nenhum comentário ainda.</li>
+      }
+    </ul>
+  }
+
+  <form (ngSubmit)="enviarComentario()">
+    <textarea
+      name="texto"
+      [ngModel]="novoComentario()"
+      (ngModelChange)="novoComentario.set($event)"
+      placeholder="Escreva um comentário..."
+      required
+    ></textarea>
+    <button type="submit">Comentar</button>
+  </form>
+
+  <button class="btn-secundario" type="button" (click)="fecharComentarios()">Fechar</button>
+</dialog>

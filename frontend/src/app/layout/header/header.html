@@ -1,0 +1,23 @@
+<header class="header">
+  <a routerLink="/" class="logo">🎬 Tom Hanks</a>
+
+  <nav class="nav">
+    <a routerLink="/" routerLinkActive="ativo" [routerLinkActiveOptions]="{ exact: true }">
+      Catálogo
+    </a>
+    <a routerLink="/favoritos" routerLinkActive="ativo">Favoritos</a>
+    <a routerLink="/comentarios" routerLinkActive="ativo">Comentários</a>
+  </nav>
+
+  <div class="perfil">
+    <button class="avatar" (click)="toggleMenu()">{{ iniciais }}</button>
+
+    @if (menuAberto()) {
+      <div class="menu-perfil">
+        <p class="nome">{{ authService.usuario()?.nome }}</p>
+        <p class="email">{{ authService.usuario()?.email }}</p>
+        <button class="btn-sair" (click)="sair()">Sair</button>
+      </div>
+    }
+  </div>
+</header>

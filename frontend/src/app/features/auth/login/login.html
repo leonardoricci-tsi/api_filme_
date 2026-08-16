@@ -1,0 +1,21 @@
+<div class="auth-page">
+  <form class="auth-form" (ngSubmit)="entrar()">
+    <h1>🎬 Catálogo de Filmes</h1>
+    <h2>Entrar</h2>
+
+    <input type="email" name="email" [(ngModel)]="email" placeholder="Email" required />
+    <input type="password" name="senha" [(ngModel)]="senha" placeholder="Senha" required />
+
+    @if (erro()) {
+      <p class="erro">{{ erro() }}</p>
+    }
+
+    <button type="submit" [disabled]="carregando()">
+      {{ carregando() ? 'Entrando...' : 'Entrar' }}
+    </button>
+
+    <p class="link-secundario">
+      Não tem conta? <a routerLink="/registro">Cadastre-se</a>
+    </p>
+  </form>
+</div>

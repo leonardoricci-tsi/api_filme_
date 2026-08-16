@@ -1,0 +1,94 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.9rem 1.5rem;
+  background: #1a1f2b;
+  border-bottom: 1px solid #262c3a;
+}
+
+.logo {
+  font-weight: 700;
+  color: #e8e8ec;
+  text-decoration: none;
+  font-size: 1.05rem;
+}
+
+.nav {
+  display: flex;
+  gap: 1.1rem;
+  flex: 1;
+}
+
+.nav a {
+  color: #a8afc2;
+  text-decoration: none;
+  font-size: 0.9rem;
+  padding: 0.3rem 0;
+  border-bottom: 2px solid transparent;
+}
+
+.nav a.ativo {
+  color: #e8e8ec;
+  border-bottom-color: #4f7cff;
+}
+
+.perfil {
+  position: relative;
+}
+
+.avatar {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  border: none;
+  background: #4f7cff;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-perfil {
+  position: absolute;
+  right: 0;
+  top: 2.8rem;
+  background: #232937;
+  border: 1px solid #333a4d;
+  border-radius: 8px;
+  padding: 0.75rem;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  z-index: 10;
+}
+
+.menu-perfil .nome {
+  font-weight: 600;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.menu-perfil .email {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #a8afc2;
+  word-break: break-all;
+}
+
+.btn-sair {
+  margin-top: 0.5rem;
+  padding: 0.4rem;
+  border: none;
+  border-radius: 6px;
+  background: #333a4d;
+  color: #e8e8ec;
+  cursor: pointer;
+}
+
+.btn-sair:hover {
+  background: #454f6b;
+}

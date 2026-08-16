@@ -1,0 +1,21 @@
+<h1>Filmes com Tom Hanks</h1>
+
+@if (erro()) {
+  <p class="erro">{{ erro() }}</p>
+} @else if (carregando()) {
+  <p>Carregando filmes...</p>
+} @else {
+  <div class="grid">
+    @for (filme of filmes(); track filme.tmdb_movie_id) {
+      <app-movie-card
+        [tmdbMovieId]="filme.tmdb_movie_id"
+        [titulo]="filme.titulo"
+        [posterUrl]="filme.poster_url"
+        [posterPath]="posterPath(filme)"
+        [sinopse]="filme.sinopse"
+        [isFavorito]="!!favoritoDoFilme(filme.tmdb_movie_id)"
+        (toggleFavorito)="alternarFavorito(filme)"
+      ></app-movie-card>
+    }
+  </div>
+}

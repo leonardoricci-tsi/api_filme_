@@ -1,0 +1,161 @@
+.filme-card {
+  background: #1a1f2b;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.filme-card img,
+.poster-vazio {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  background: #0f121a;
+}
+
+.poster-vazio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666e85;
+  font-size: 0.8rem;
+}
+
+.conteudo {
+  padding: 0.6rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1;
+}
+
+.conteudo h3 {
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.sinopse {
+  font-size: 0.78rem;
+  color: #a8afc2;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.acoes {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: auto;
+}
+
+button {
+  cursor: pointer;
+  padding: 0.45rem;
+  border-radius: 6px;
+  border: none;
+  background: #4f7cff;
+  color: white;
+  font-weight: 600;
+  font-size: 0.8rem;
+  flex: 1;
+}
+
+button:hover {
+  background: #3a63e0;
+}
+
+button.favorito-ativo {
+  background: #d9a441;
+}
+
+button.favorito-ativo:hover {
+  background: #bd8a2e;
+}
+
+.btn-secundario {
+  background: #333a4d;
+}
+
+.btn-secundario:hover {
+  background: #454f6b;
+}
+
+dialog.dialog-comentarios {
+  position: relative;
+  background: #1a1f2b;
+  color: #e8e8ec;
+  border: none;
+  border-radius: 10px;
+  padding: 1.25rem;
+  max-width: 480px;
+  width: 90%;
+}
+
+dialog.dialog-comentarios::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.lista-comentarios {
+  list-style: none;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 0.75rem 0;
+}
+
+.lista-comentarios li {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #333a4d;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.lista-comentarios li.vazio {
+  color: #666e85;
+  justify-content: center;
+}
+
+.btn-remover {
+  flex: none;
+  background: #333a4d;
+  padding: 0.2rem 0.5rem;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+textarea {
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #333a4d;
+  background: #0f121a;
+  color: #e8e8ec;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.erro {
+  color: #ff6b6b;
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
+}
+
+.sucesso {
+  background: #1e3a2b;
+  color: #4ade80;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin: 0 0 0.5rem;
+}

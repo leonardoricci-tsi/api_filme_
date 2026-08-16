@@ -1,0 +1,27 @@
+<div class="auth-page">
+  <form class="auth-form" (ngSubmit)="cadastrar()">
+    <h1>🎬 Catálogo de Filmes</h1>
+    <h2>Cadastrar</h2>
+
+    <input type="text" name="nome" [(ngModel)]="nome" placeholder="Nome" required />
+    <input type="email" name="email" [(ngModel)]="email" placeholder="Email" required />
+    <input
+      type="password"
+      name="senha"
+      [(ngModel)]="senha"
+      placeholder="Senha (mín. 8 caracteres)"
+      minlength="8"
+      required
+    />
+
+    @if (erro()) {
+      <p class="erro">{{ erro() }}</p>
+    }
+
+    <button type="submit" [disabled]="carregando()">
+      {{ carregando() ? 'Cadastrando...' : 'Cadastrar' }}
+    </button>
+
+    <p class="link-secundario">Já tem conta? <a routerLink="/login">Entrar</a></p>
+  </form>
+</div>

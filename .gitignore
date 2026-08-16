@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.db
+.pytest_cache/
+.DS_Store
+
+# Build do Angular: gerado por `npm run build` (dev) ou pelo Dockerfile
+# (deploy) — nunca precisa ir pro git.
+/app/static/*
+!/app/static/.gitkeep
