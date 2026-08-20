@@ -1,6 +1,6 @@
 # Catálogo de Filmes — Tom Hanks (multi-tenant)
 
-> Atividade da disciplina, proposta pelo professor [@siriani](https://github.com/siriani).
+> Atividade da disciplina, proposta pelo professor [@siriani].
 
 API FastAPI que lista filmes do Tom Hanks (dados sempre ao vivo da TMDB, nunca persistidos) e permite que cada usuário cadastrado no app favorite e comente filmes, com isolamento total de dados entre usuários.
 
