@@ -2,7 +2,7 @@
 
 > Atividade da disciplina, proposta pelo professor [@siriani].
 
-API FastAPI que lista filmes do Tom Hanks (dados sempre ao vivo da TMDB, nunca persistidos) e permite que cada usuário cadastrado no app favorite e comente filmes, com isolamento total de dados entre usuários.
+API FastAPI que lista filmes do Tom Hanks (dados sempre ao vivo da TMDB, nunca persistidos) e permite que cada usuário cadastrado no app favorite e comente filmes, com isolamento total de dados entre usuários proposto pelo professor @siriani.
 
 ## Stack
 - **Backend:** FastAPI + SQLAlchemy + Alembic
