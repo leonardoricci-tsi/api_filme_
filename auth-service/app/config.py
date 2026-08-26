@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_expire_minutes: int = 60
     jwt_algorithm: str = "HS256"
+    # URL pública do catálogo — é ele o único ponto de entrada de fora, então
+    # o link de redefinição de senha aponta pra lá (não pro auth-service,
+    # que não tem porta publicada).
+    catalog_public_url: str = "http://localhost:8000"
 
 
 @lru_cache

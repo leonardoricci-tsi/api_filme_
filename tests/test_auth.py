@@ -100,6 +100,47 @@ def test_me_sem_token_repassa_401_do_auth_service(client):
 
 
 @respx.mock
+def test_forgot_password_repassa_resposta_do_auth_service(client):
+    rota_mock = respx.post(f"{AUTH_SERVICE_URL}/auth/forgot-password").mock(
+        return_value=Response(
+            200, json={"detail": "Se esse email estiver cadastrado, você vai receber um link"}
+        )
+    )
+
+    resposta = client.post("/auth/forgot-password", json={"email": "alguem@example.com"})
+
+    assert resposta.status_code == 200
+    assert rota_mock.calls.last.request.content == b'{"email":"alguem@example.com"}'
+
+
+@respx.mock
+def test_reset_password_repassa_resposta_do_auth_service(client):
+    respx.post(f"{AUTH_SERVICE_URL}/auth/reset-password").mock(
+        return_value=Response(200, json={"detail": "Senha redefinida com sucesso"})
+    )
+
+    resposta = client.post(
+        "/auth/reset-password", json={"token": "algum-token", "nova_senha": "novaSenha123"}
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["detail"] == "Senha redefinida com sucesso"
+
+
+@respx.mock
+def test_reset_password_token_invalido_repassa_400_do_auth_service(client):
+    respx.post(f"{AUTH_SERVICE_URL}/auth/reset-password").mock(
+        return_value=Response(400, json={"detail": "Link inválido, expirado ou já utilizado"})
+    )
+
+    resposta = client.post(
+        "/auth/reset-password", json={"token": "token-invalido", "nova_senha": "novaSenha123"}
+    )
+
+    assert resposta.status_code == 400
+
+
+@respx.mock
 def test_auth_service_fora_do_ar_retorna_502(client):
     respx.post(f"{AUTH_SERVICE_URL}/auth/login").mock(
         side_effect=httpx.ConnectError("connection refused")
