@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import UsuarioAutenticado, get_current_user
 from app.database import get_db
-from app.models import Favorito, Usuario
+from app.models import Favorito
 from app.routers._ownership import get_owned_or_404
 from app.schemas.favorite import FavoriteIn, FavoriteOut
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/favorites", tags=["favorites"])
 @router.post("", response_model=FavoriteOut, status_code=status.HTTP_201_CREATED)
 def criar_favorito(
     dados: FavoriteIn,
-    usuario_atual: Usuario = Depends(get_current_user),
+    usuario_atual: UsuarioAutenticado = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FavoriteOut:
     favorito = Favorito(
@@ -36,7 +36,7 @@ def criar_favorito(
 
 @router.get("", response_model=list[FavoriteOut])
 def listar_favoritos(
-    usuario_atual: Usuario = Depends(get_current_user),
+    usuario_atual: UsuarioAutenticado = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[FavoriteOut]:
     return (
@@ -50,7 +50,7 @@ def listar_favoritos(
 @router.delete("/{favorito_id}", status_code=status.HTTP_204_NO_CONTENT)
 def deletar_favorito(
     favorito_id: int,
-    usuario_atual: Usuario = Depends(get_current_user),
+    usuario_atual: UsuarioAutenticado = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
     favorito = get_owned_or_404(db, Favorito, favorito_id, usuario_atual.id)

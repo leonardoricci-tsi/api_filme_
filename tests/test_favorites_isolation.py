@@ -1,4 +1,4 @@
-from tests.conftest import auth_headers, registrar_usuario
+from tests.conftest import auth_headers, criar_token
 
 
 def criar_favorito(client, token, tmdb_movie_id=13, titulo="Forrest Gump"):
@@ -12,7 +12,7 @@ def criar_favorito(client, token, tmdb_movie_id=13, titulo="Forrest Gump"):
 
 
 def test_criar_listar_deletar_favorito_do_proprio_usuario(client):
-    token = registrar_usuario(client, email="dono@example.com")
+    token = criar_token()
 
     favorito = criar_favorito(client, token)
 
@@ -28,7 +28,7 @@ def test_criar_listar_deletar_favorito_do_proprio_usuario(client):
 
 
 def test_favoritar_mesmo_filme_duas_vezes_retorna_409(client):
-    token = registrar_usuario(client, email="dup_fav@example.com")
+    token = criar_token()
     criar_favorito(client, token, tmdb_movie_id=42)
 
     resposta = client.post(
@@ -45,8 +45,8 @@ def test_rota_de_favoritos_exige_autenticacao(client):
 
 
 def test_usuario_b_nao_ve_favorito_de_usuario_a_na_listagem(client):
-    token_a = registrar_usuario(client, email="a@example.com")
-    token_b = registrar_usuario(client, email="b@example.com")
+    token_a = criar_token()
+    token_b = criar_token()
 
     criar_favorito(client, token_a)
 
@@ -56,8 +56,8 @@ def test_usuario_b_nao_ve_favorito_de_usuario_a_na_listagem(client):
 
 
 def test_usuario_b_nao_consegue_deletar_favorito_de_usuario_a(client):
-    token_a = registrar_usuario(client, email="a2@example.com")
-    token_b = registrar_usuario(client, email="b2@example.com")
+    token_a = criar_token()
+    token_b = criar_token()
 
     favorito_a = criar_favorito(client, token_a)
 

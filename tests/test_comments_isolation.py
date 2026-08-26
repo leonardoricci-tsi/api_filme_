@@ -1,4 +1,4 @@
-from tests.conftest import auth_headers, registrar_usuario
+from tests.conftest import auth_headers, criar_token
 
 
 def criar_comentario(
@@ -14,7 +14,7 @@ def criar_comentario(
 
 
 def test_criar_listar_deletar_comentario_do_proprio_usuario(client):
-    token = registrar_usuario(client, email="dono_c@example.com")
+    token = criar_token()
 
     comentario = criar_comentario(client, token)
     assert comentario["titulo"] == "Forrest Gump"
@@ -40,8 +40,8 @@ def test_rota_de_comentarios_exige_autenticacao(client):
 
 
 def test_usuario_b_nao_ve_comentario_de_usuario_a_na_listagem(client):
-    token_a = registrar_usuario(client, email="ac@example.com")
-    token_b = registrar_usuario(client, email="bc@example.com")
+    token_a = criar_token()
+    token_b = criar_token()
 
     criar_comentario(client, token_a, tmdb_movie_id=99)
 
@@ -53,8 +53,8 @@ def test_usuario_b_nao_ve_comentario_de_usuario_a_na_listagem(client):
 
 
 def test_usuario_b_nao_consegue_deletar_comentario_de_usuario_a(client):
-    token_a = registrar_usuario(client, email="ac2@example.com")
-    token_b = registrar_usuario(client, email="bc2@example.com")
+    token_a = criar_token()
+    token_b = criar_token()
 
     comentario_a = criar_comentario(client, token_a)
 
@@ -68,7 +68,7 @@ def test_usuario_b_nao_consegue_deletar_comentario_de_usuario_a(client):
 
 
 def test_listar_todos_comentarios_do_usuario_sem_filtro_de_filme(client):
-    token = registrar_usuario(client, email="multi_c@example.com")
+    token = criar_token()
     criar_comentario(client, token, tmdb_movie_id=13, titulo="Forrest Gump", texto="Top!")
     criar_comentario(client, token, tmdb_movie_id=857, titulo="Saving Private Ryan", texto="Ótimo!")
 
@@ -82,8 +82,8 @@ def test_listar_todos_comentarios_do_usuario_sem_filtro_de_filme(client):
 
 
 def test_listar_todos_comentarios_isola_por_usuario(client):
-    token_a = registrar_usuario(client, email="all_a@example.com")
-    token_b = registrar_usuario(client, email="all_b@example.com")
+    token_a = criar_token()
+    token_b = criar_token()
 
     criar_comentario(client, token_a, tmdb_movie_id=13, titulo="Forrest Gump")
     criar_comentario(client, token_b, tmdb_movie_id=857, titulo="Saving Private Ryan")

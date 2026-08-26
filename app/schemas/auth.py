@@ -1,6 +1,4 @@
-from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class RegisterIn(BaseModel):
@@ -12,17 +10,3 @@ class RegisterIn(BaseModel):
 class LoginIn(BaseModel):
     email: EmailStr
     senha: str
-
-
-class UsuarioOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    nome: str
-    email: str
-    criado_em: datetime
-
-
-class TokenOut(BaseModel):
-    access_token: str
-    token_type: str = "bearer"

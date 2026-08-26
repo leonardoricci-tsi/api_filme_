@@ -1,22 +1,17 @@
+import itertools
+
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.auth.dependencies import clear_usuario_cache
+from app.config import get_settings
 from app.database import Base, get_db
 from app.main import app
 
-
-@pytest.fixture(autouse=True)
-def _limpar_cache_usuario():
-    # Cada teste usa um SQLite em memória novo, então os IDs de usuário
-    # reiniciam do 1 — sem isso, o cache de get_current_user vazaria dados
-    # de um teste pro outro.
-    clear_usuario_cache()
-    yield
-    clear_usuario_cache()
+_proximo_usuario_id = itertools.count(1)
 
 
 @pytest.fixture()
@@ -52,12 +47,17 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
-def registrar_usuario(client, nome="Usuário Teste", email="teste@example.com", senha="senha12345"):
-    resposta = client.post(
-        "/auth/register", json={"nome": nome, "email": email, "senha": senha}
-    )
-    assert resposta.status_code == 201, resposta.text
-    return resposta.json()["access_token"]
+def criar_token(usuario_id: int | None = None, role: str = "usuario") -> str:
+    """Gera um JWT do jeito que o auth-service geraria — o catálogo só
+    verifica a assinatura localmente, não tem mais tabela de usuários pra
+    consultar, então os testes de favoritos/comentários não precisam de um
+    usuário "de verdade": só de um token válido com um usuario_id qualquer.
+    """
+    if usuario_id is None:
+        usuario_id = next(_proximo_usuario_id)
+    settings = get_settings()
+    payload = {"sub": str(usuario_id), "role": role}
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
 def auth_headers(token: str) -> dict:

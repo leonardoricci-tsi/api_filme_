@@ -9,8 +9,10 @@ class Settings(BaseSettings):
     database_url: str
     tmdb_api_key: str
     jwt_secret: str
-    jwt_expire_minutes: int = 60
     jwt_algorithm: str = "HS256"
+    # Nome do serviço no docker-compose (rede interna) — o catálogo nunca
+    # fala com o auth-service pelo host nem por IP, só por esse DNS interno.
+    auth_service_url: str = "http://auth-service:8001"
 
 
 @lru_cache
