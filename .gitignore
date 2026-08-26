@@ -6,6 +6,7 @@ venv/
 *.db
 .pytest_cache/
 .DS_Store
+comando.txt
 
 # Build do Angular: gerado por `npm run build` (dev) ou pelo Dockerfile
 # (deploy) — nunca precisa ir pro git.
