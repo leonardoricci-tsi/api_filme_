@@ -1,6 +1,27 @@
+import smtplib
+from email.message import EmailMessage
+
+from app.config import get_settings
+
+
 def send_reset_email(email: str, link: str) -> None:
-    """Fase 3: só loga o link no stdout do container (sem envio real) — o
-    ponto de entrada certo já fica pronto pra fase 4 trocar isso por SMTP
-    de verdade (Mailtrap em dev, Brevo em produção) sem mexer em mais nada
-    além desta função."""
-    print(f"[mailer STUB] Redefinição de senha para {email}: {link}", flush=True)
+    
+    settings = get_settings()
+
+    mensagem = EmailMessage()
+    mensagem["Subject"] = "Redefinição de senha — Catálogo de Filmes"
+    mensagem["From"] = f"{settings.smtp_from_name} <{settings.smtp_from_email}>"
+    mensagem["To"] = email
+    mensagem.set_content(
+        "Recebemos um pedido para redefinir sua senha.\n\n"
+        f"Clique no link abaixo para criar uma nova senha (válido por 30 minutos):\n{link}\n\n"
+        "Se você não pediu isso, ignore este e-mail."
+    )
+
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
+            smtp.starttls()
+            smtp.login(settings.smtp_user, settings.smtp_password)
+            smtp.send_message(mensagem)
+    except (smtplib.SMTPException, OSError) as erro:
+        print(f"[mailer] falha ao enviar e-mail de redefinição para {email}: {erro}", flush=True)
