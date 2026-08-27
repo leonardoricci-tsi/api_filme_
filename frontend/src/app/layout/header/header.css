@@ -66,10 +66,34 @@
   z-index: 10;
 }
 
+.linha-nome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .menu-perfil .nome {
   font-weight: 600;
   margin: 0;
   font-size: 0.85rem;
+}
+
+.tag-role {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #333a4d;
+  color: #a8afc2;
+  white-space: nowrap;
+}
+
+.tag-role.admin {
+  background: #4f7cff;
+  color: white;
 }
 
 .menu-perfil .email {

@@ -14,7 +14,12 @@
 
     @if (menuAberto()) {
       <div class="menu-perfil">
-        <p class="nome">{{ authService.usuario()?.nome }}</p>
+        <div class="linha-nome">
+          <p class="nome">{{ authService.usuario()?.nome }}</p>
+          <span class="tag-role" [class.admin]="authService.usuario()?.role === 'admin'">
+            {{ authService.usuario()?.role === 'admin' ? 'Admin' : 'Usuário' }}
+          </span>
+        </div>
         <p class="email">{{ authService.usuario()?.email }}</p>
         <button class="btn-sair" (click)="sair()">Sair</button>
       </div>

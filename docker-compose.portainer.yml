@@ -1,0 +1,37 @@
+networks:
+  catalog-net:
+    driver: bridge
+
+services:
+  api:
+    image: leonardoriccitsi/api-filmes:v2
+    ports:
+      - "8215:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      TMDB_API_KEY: ${TMDB_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
+      AUTH_SERVICE_URL: http://auth-service:8001
+    networks:
+      - catalog-net
+    depends_on:
+      - auth-service
+    restart: unless-stopped
+
+  auth-service:
+    image: leonardoriccitsi/api-filmes-auth:v2
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      CATALOG_PUBLIC_URL: ${CATALOG_PUBLIC_URL}
+    expose:
+      - "8001"
+    networks:
+      - catalog-net
+    restart: unless-stopped

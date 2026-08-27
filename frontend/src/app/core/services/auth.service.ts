@@ -13,10 +13,12 @@ import {
 const TOKEN_KEY = 'token';
 const NOME_KEY = 'nome';
 const EMAIL_KEY = 'email';
+const ROLE_KEY = 'role';
 
 export interface UsuarioLogado {
   nome: string;
   email: string;
+  role: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -32,7 +34,8 @@ export class AuthService {
   private lerUsuarioSalvo(): UsuarioLogado | null {
     const nome = localStorage.getItem(NOME_KEY);
     const email = localStorage.getItem(EMAIL_KEY);
-    return nome && email ? { nome, email } : null;
+    const role = localStorage.getItem(ROLE_KEY);
+    return nome && email && role ? { nome, email, role } : null;
   }
 
   getToken(): string | null {
@@ -60,6 +63,7 @@ export class AuthService {
       tap((usuario) => {
         localStorage.setItem(NOME_KEY, usuario.nome);
         localStorage.setItem(EMAIL_KEY, usuario.email);
+        localStorage.setItem(ROLE_KEY, usuario.role);
         this._usuario.set(usuario);
       }),
     );
@@ -77,6 +81,7 @@ export class AuthService {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(NOME_KEY);
     localStorage.removeItem(EMAIL_KEY);
+    localStorage.removeItem(ROLE_KEY);
     this._token.set(null);
     this._usuario.set(null);
   }
