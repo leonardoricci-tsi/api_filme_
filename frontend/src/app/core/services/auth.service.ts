@@ -2,7 +2,13 @@ import { Injectable, computed, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, switchMap, tap } from 'rxjs';
 
-import { LoginPayload, RegisterPayload, TokenResponse } from '../../models/auth.model';
+import {
+  ForgotPasswordPayload,
+  LoginPayload,
+  RegisterPayload,
+  ResetPasswordPayload,
+  TokenResponse,
+} from '../../models/auth.model';
 
 const TOKEN_KEY = 'token';
 const NOME_KEY = 'nome';
@@ -57,6 +63,14 @@ export class AuthService {
         this._usuario.set(usuario);
       }),
     );
+  }
+
+  forgotPassword(payload: ForgotPasswordPayload): Observable<{ detail: string }> {
+    return this.http.post<{ detail: string }>('/auth/forgot-password', payload);
+  }
+
+  resetPassword(payload: ResetPasswordPayload): Observable<{ detail: string }> {
+    return this.http.post<{ detail: string }>('/auth/reset-password', payload);
   }
 
   logout(): void {

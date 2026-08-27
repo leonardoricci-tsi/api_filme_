@@ -65,6 +65,12 @@
   margin: 0;
 }
 
+.mensagem-sucesso {
+  color: #4fd18b;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
 .link-secundario {
   text-align: center;
   font-size: 0.85rem;
