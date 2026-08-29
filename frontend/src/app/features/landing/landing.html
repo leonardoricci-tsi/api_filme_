@@ -1,5 +1,8 @@
 <header class="topo">
-  <a routerLink="/" class="logo">🎬 Tom Hanks</a>
+  <a routerLink="/" class="logo">
+    <img src="/logo-icon.svg" alt="" class="logo-icone" />
+    Tom Hanks
+  </a>
 
   <nav class="acoes-topo">
     <a routerLink="/login" class="btn-entrar">Entrar</a>
@@ -9,6 +12,7 @@
 
 <section class="hero">
   <div class="hero-conteudo">
+    <img src="/logo.svg" alt="Tom Hanks — catálogo de filmes" class="hero-logo" />
     <span class="selo">Catálogo dedicado</span>
     <h1>Todo o cinema de <span class="destaque">Tom Hanks</span>, em um só lugar</h1>
     <p class="subtitulo">
@@ -98,11 +102,7 @@
     <div class="grade-posteres">
       @for (filme of filmes(); track filme.tmdb_movie_id) {
         <div class="poster-card">
-          @if (filme.poster_url) {
-            <img [src]="filme.poster_url" [alt]="filme.titulo" loading="lazy" />
-          } @else {
-            <div class="poster-vazio">Sem pôster</div>
-          }
+          <img [src]="filme.poster_url" [alt]="filme.titulo" loading="lazy" />
           <div class="poster-sombra">
             <p>{{ filme.titulo }}</p>
           </div>
@@ -117,7 +117,7 @@
 </section>
 
 <footer class="rodape">
-  <p>🎬 Tom Hanks &mdash; Catálogo de Filmes</p>
+  <img src="/logo-faixa.svg" alt="Tom Hanks — catálogo de filmes" class="rodape-logo" />
   <nav class="rodape-links">
     <a routerLink="/login">Entrar</a>
     <a routerLink="/registro">Criar conta</a>

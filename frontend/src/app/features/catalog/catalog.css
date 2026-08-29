@@ -1,3 +1,10 @@
+.logo-catalogo {
+  display: block;
+  height: 3.4rem;
+  width: auto;
+  margin-bottom: 1rem;
+}
+
 h1 {
   font-size: 1.3rem;
   margin: 0 0 1.2rem;

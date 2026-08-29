@@ -31,7 +31,7 @@ export class Landing implements OnInit {
 
     this.moviesService.listar().subscribe({
       next: (filmes) => {
-        this.filmes.set(filmes.slice(0, 10));
+        this.filmes.set(filmes.filter((filme) => filme.poster_url).slice(0, 10));
         this.carregando.set(false);
       },
       error: () => this.carregando.set(false),

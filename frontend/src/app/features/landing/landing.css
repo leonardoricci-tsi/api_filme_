@@ -10,10 +10,24 @@
 }
 
 .logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 1.2rem;
   font-weight: 700;
   text-decoration: none;
   color: #e8e8ec;
+}
+
+.logo-icone {
+  height: 1.9rem;
+  width: 1.9rem;
+}
+
+.hero-logo {
+  height: 4.5rem;
+  width: auto;
+  margin-bottom: 0.4rem;
 }
 
 .acoes-topo {
@@ -310,16 +324,6 @@
   display: block;
 }
 
-.poster-vazio {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #666e85;
-  font-size: 0.8rem;
-}
-
 .poster-sombra {
   position: absolute;
   inset: auto 0 0 0;
@@ -360,6 +364,11 @@
 
 .rodape p {
   margin: 0;
+}
+
+.rodape-logo {
+  height: 2.6rem;
+  width: auto;
 }
 
 .rodape-links {
