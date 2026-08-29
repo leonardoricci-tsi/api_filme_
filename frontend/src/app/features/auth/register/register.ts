@@ -33,7 +33,7 @@ export class Register {
       .subscribe({
         next: () => {
           this.carregando.set(false);
-          this.router.navigate(['/']);
+          this.router.navigate(['/app']);
         },
         error: (erro) => {
           this.carregando.set(false);

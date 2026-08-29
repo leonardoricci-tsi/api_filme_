@@ -31,6 +31,6 @@ export class Header {
   sair(): void {
     this.authService.logout();
     this.menuAberto.set(false);
-    this.router.navigate(['/login']);
+    this.router.navigate(['/']);
   }
 }

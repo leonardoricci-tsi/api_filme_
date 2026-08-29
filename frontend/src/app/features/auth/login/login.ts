@@ -30,7 +30,7 @@ export class Login {
     this.authService.login({ email: this.email, senha: this.senha }).subscribe({
       next: () => {
         this.carregando.set(false);
-        this.router.navigate(['/']);
+        this.router.navigate(['/app']);
       },
       error: (erro) => {
         this.carregando.set(false);

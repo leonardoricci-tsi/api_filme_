@@ -27,7 +27,7 @@ export const routes: Routes = [
       import('./features/auth/reset-password/reset-password').then((m) => m.ResetPassword),
   },
   {
-    path: '',
+    path: 'app',
     component: AppShell,
     canActivate: [authGuard],
     children: [
@@ -44,6 +44,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/comments/comments').then((m) => m.Comments),
       },
     ],
+  },
+  {
+    path: '',
+    loadComponent: () => import('./features/landing/landing').then((m) => m.Landing),
   },
   { path: '**', redirectTo: '' },
 ];

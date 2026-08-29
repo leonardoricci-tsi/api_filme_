@@ -1,0 +1,125 @@
+<header class="topo">
+  <a routerLink="/" class="logo">🎬 Tom Hanks</a>
+
+  <nav class="acoes-topo">
+    <a routerLink="/login" class="btn-entrar">Entrar</a>
+    <a routerLink="/registro" class="btn-cadastrar">Criar conta</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <div class="hero-conteudo">
+    <span class="selo">Catálogo dedicado</span>
+    <h1>Todo o cinema de <span class="destaque">Tom Hanks</span>, em um só lugar</h1>
+    <p class="subtitulo">
+      Do clássico ao contemporâneo: descubra, favorite e comente os filmes do ator mais
+      querido de Hollywood. Crie sua conta grátis e monte sua coleção pessoal.
+    </p>
+    <div class="hero-botoes">
+      <a routerLink="/registro" class="btn-primario">Criar conta grátis</a>
+      <a routerLink="/login" class="btn-secundario">Já tenho conta</a>
+    </div>
+  </div>
+</section>
+
+<section class="recursos">
+  <div class="recurso">
+    <span class="icone">🎞️</span>
+    <h3>Catálogo completo</h3>
+    <p>Explore a filmografia com sinopse, pôster e data de lançamento de cada filme.</p>
+  </div>
+  <div class="recurso">
+    <span class="icone">⭐</span>
+    <h3>Favoritos</h3>
+    <p>Marque os filmes que você mais gosta e monte sua lista pessoal em segundos.</p>
+  </div>
+  <div class="recurso">
+    <span class="icone">💬</span>
+    <h3>Comentários</h3>
+    <p>Compartilhe sua opinião sobre cada filme e veja o que outros fãs acharam.</p>
+  </div>
+</section>
+
+<section class="planos">
+  <h2>Escolha o seu nível de fã</h2>
+  <p class="planos-subtitulo">Quanto maior a obsessão, maior o plano.</p>
+
+  <div class="grade-planos">
+    <div class="plano-card">
+      <span class="plano-icone">🍿</span>
+      <h3>Cinéfilo</h3>
+      <p class="plano-preco">R$ 9,90<span class="plano-periodo">/mês</span></p>
+      <p class="plano-descricao">Para quem curte um clássico com calma, sem compromisso.</p>
+      <ul class="plano-lista">
+        <li>Acesso ao catálogo completo</li>
+        <li>Sinopse e ficha técnica de cada filme</li>
+        <li>Perfil pessoal</li>
+      </ul>
+      <a routerLink="/registro" class="btn-secundario btn-plano">Escolher plano</a>
+    </div>
+
+    <div class="plano-card plano-destaque">
+      <span class="plano-selo">Mais popular</span>
+      <span class="plano-icone">🤓</span>
+      <h3>Nerd</h3>
+      <p class="plano-preco">R$ 19,90<span class="plano-periodo">/mês</span></p>
+      <p class="plano-descricao">Sabe o ano de lançamento de cor e adora debater cada cena.</p>
+      <ul class="plano-lista">
+        <li>Tudo do plano Cinéfilo</li>
+        <li>Favoritar filmes</li>
+        <li>Comentar e ler a opinião de outros fãs</li>
+      </ul>
+      <a routerLink="/registro" class="btn-primario btn-plano">Escolher plano</a>
+    </div>
+
+    <div class="plano-card">
+      <span class="plano-icone">🕵️</span>
+      <h3>Stalker do Tom Hanks</h3>
+      <p class="plano-preco">R$ 9.999,90<span class="plano-periodo">/mês</span></p>
+      <p class="plano-descricao">Já decorou a filmografia inteira e sabe até o nome do cachorro do elenco.</p>
+      <ul class="plano-lista">
+        <li>Tudo do plano Nerd</li>
+        <li>Acesso vitalício ao fã-clube</li>
+        <li>Nível de dedicação: PhD em Forrest Gump</li>
+      </ul>
+      <a routerLink="/registro" class="btn-secundario btn-plano">Escolher plano</a>
+    </div>
+  </div>
+</section>
+
+<section class="vitrine">
+  <h2>Alguns filmes do catálogo</h2>
+
+  @if (carregando()) {
+    <p class="status">Carregando pôsteres...</p>
+  } @else if (filmes().length === 0) {
+    <p class="status">Catálogo indisponível no momento.</p>
+  } @else {
+    <div class="grade-posteres">
+      @for (filme of filmes(); track filme.tmdb_movie_id) {
+        <div class="poster-card">
+          @if (filme.poster_url) {
+            <img [src]="filme.poster_url" [alt]="filme.titulo" loading="lazy" />
+          } @else {
+            <div class="poster-vazio">Sem pôster</div>
+          }
+          <div class="poster-sombra">
+            <p>{{ filme.titulo }}</p>
+          </div>
+        </div>
+      }
+    </div>
+    <div class="vitrine-cta">
+      <p>Crie sua conta para favoritar e comentar cada filme.</p>
+      <a routerLink="/registro" class="btn-primario">Quero ver tudo</a>
+    </div>
+  }
+</section>
+
+<footer class="rodape">
+  <p>🎬 Tom Hanks &mdash; Catálogo de Filmes</p>
+  <nav class="rodape-links">
+    <a routerLink="/login">Entrar</a>
+    <a routerLink="/registro">Criar conta</a>
+  </nav>
+</footer>
