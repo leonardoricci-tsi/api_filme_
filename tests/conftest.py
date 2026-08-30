@@ -47,7 +47,9 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
-def criar_token(usuario_id: int | None = None, role: str = "usuario") -> str:
+def criar_token(
+    usuario_id: int | None = None, role: str = "usuario", nome: str = "Usuário Teste"
+) -> str:
     """Gera um JWT do jeito que o auth-service geraria — o catálogo só
     verifica a assinatura localmente, não tem mais tabela de usuários pra
     consultar, então os testes de favoritos/comentários não precisam de um
@@ -56,7 +58,7 @@ def criar_token(usuario_id: int | None = None, role: str = "usuario") -> str:
     if usuario_id is None:
         usuario_id = next(_proximo_usuario_id)
     settings = get_settings()
-    payload = {"sub": str(usuario_id), "role": role}
+    payload = {"sub": str(usuario_id), "role": role, "nome": nome}
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

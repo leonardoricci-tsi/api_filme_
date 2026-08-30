@@ -16,11 +16,12 @@ def verify_password(senha: str, senha_hash: str) -> bool:
     return bcrypt.checkpw(senha.encode("utf-8"), senha_hash.encode("utf-8"))
 
 
-def create_access_token(usuario_id: int, role: str) -> str:
-    """O token carrega o role como claim — o catálogo lê o papel direto do
-    JWT (localmente, sem round-trip de rede) pra decidir o que autorizar."""
+def create_access_token(usuario_id: int, role: str, nome: str) -> str:
+    """O token carrega role e nome como claims — o catálogo lê os dois
+    direto do JWT (localmente, sem round-trip de rede): role pra decidir o
+    que autorizar, nome pra exibir de quem é cada comentário."""
     expira_em = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
-    payload = {"sub": str(usuario_id), "role": role, "exp": expira_em}
+    payload = {"sub": str(usuario_id), "role": role, "nome": nome, "exp": expira_em}
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

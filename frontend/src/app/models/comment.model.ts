@@ -3,8 +3,10 @@ export interface MovieComment {
   tmdb_movie_id: number;
   titulo: string | null;
   poster_path: string | null;
+  nome_usuario: string | null;
   texto: string;
   criado_em: string;
+  meu: boolean;
 }
 
 export interface CommentPayload {

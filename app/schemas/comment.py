@@ -17,5 +17,9 @@ class CommentOut(BaseModel):
     tmdb_movie_id: int
     titulo: str | None
     poster_path: str | None
+    nome_usuario: str | None
     texto: str
     criado_em: datetime
+    # Computado por requisição (não é coluna): true só quando o comentário é
+    # do usuario logado, pra frontend decidir se mostra o botão de apagar.
+    meu: bool

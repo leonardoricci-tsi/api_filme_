@@ -17,6 +17,9 @@ class Comentario(Base):
     tmdb_movie_id: Mapped[int] = mapped_column(nullable=False, index=True)
     titulo: Mapped[str | None] = mapped_column(String(500), nullable=True)
     poster_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Snapshot do nome de quem comentou, gravado na hora — mesmo motivo do
+    # titulo/poster_path acima: sem tabela usuarios aqui pra fazer join.
+    nome_usuario: Mapped[str | None] = mapped_column(String(255), nullable=True)
     texto: Mapped[str] = mapped_column(Text, nullable=False)
     criado_em: Mapped[datetime] = mapped_column(
         DateTime, default=utc_now_naive, server_default=func.now()

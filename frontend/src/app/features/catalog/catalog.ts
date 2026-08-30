@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 
 import { FavoritesService } from '../../core/services/favorites.service';
 import { MoviesService } from '../../core/services/movies.service';
@@ -10,15 +11,22 @@ import { MovieCard } from '../../shared/movie-card/movie-card';
 @Component({
   selector: 'app-catalog',
   standalone: true,
-  imports: [CommonModule, MovieCard],
+  imports: [CommonModule, FormsModule, MovieCard],
   templateUrl: './catalog.html',
   styleUrl: './catalog.css',
 })
-export class Catalog implements OnInit {
+export class Catalog implements OnInit, OnDestroy {
   filmes = signal<Movie[]>([]);
   favoritos = signal<Favorite[]>([]);
   carregando = signal(true);
   erro = signal('');
+
+  busca = signal('');
+  private buscaTimeout?: ReturnType<typeof setTimeout>;
+
+  pagina = signal(1);
+  totalPaginas = signal(1);
+  paginas = computed(() => Array.from({ length: this.totalPaginas() }, (_, i) => i + 1));
 
   constructor(
     private readonly moviesService: MoviesService,
@@ -30,11 +38,25 @@ export class Catalog implements OnInit {
     this.carregarFilmes();
   }
 
+  ngOnDestroy(): void {
+    clearTimeout(this.buscaTimeout);
+  }
+
+  onBuscaChange(valor: string): void {
+    this.busca.set(valor);
+    clearTimeout(this.buscaTimeout);
+    this.buscaTimeout = setTimeout(() => {
+      this.pagina.set(1);
+      this.carregarFilmes();
+    }, 350);
+  }
+
   private carregarFilmes(): void {
     this.carregando.set(true);
-    this.moviesService.listar().subscribe({
-      next: (filmes) => {
-        this.filmes.set(filmes);
+    this.moviesService.listar(this.pagina(), this.busca()).subscribe({
+      next: (resposta) => {
+        this.filmes.set(resposta.itens);
+        this.totalPaginas.set(resposta.total_paginas);
         this.carregando.set(false);
       },
       error: () => {
@@ -48,6 +70,14 @@ export class Catalog implements OnInit {
     this.favoritesService.listar().subscribe({
       next: (favoritos) => this.favoritos.set(favoritos),
     });
+  }
+
+  irParaPagina(pagina: number): void {
+    if (pagina < 1 || pagina > this.totalPaginas() || pagina === this.pagina()) {
+      return;
+    }
+    this.pagina.set(pagina);
+    this.carregarFilmes();
   }
 
   favoritoDoFilme(tmdbMovieId: number): Favorite | undefined {

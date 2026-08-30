@@ -25,7 +25,7 @@ def register(dados: RegisterIn, db: Session = Depends(get_db)) -> TokenOut:
     db.add(usuario)
     db.commit()
 
-    token = create_access_token(usuario.id, usuario.role)
+    token = create_access_token(usuario.id, usuario.role, usuario.nome)
     return TokenOut(access_token=token)
 
 
@@ -39,7 +39,7 @@ def login(dados: LoginIn, db: Session = Depends(get_db)) -> TokenOut:
     if usuario is None or not verify_password(dados.senha, usuario.senha_hash):
         raise credenciais_invalidas
 
-    token = create_access_token(usuario.id, usuario.role)
+    token = create_access_token(usuario.id, usuario.role, usuario.nome)
     return TokenOut(access_token=token)
 
 

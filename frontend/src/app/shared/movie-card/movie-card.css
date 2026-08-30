@@ -5,6 +5,15 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  cursor: pointer;
+}
+
+.filme-card:hover {
+  outline: 2px solid #333a4d;
+}
+
+.filme-card:focus-visible {
+  outline: 2px solid #d9a441;
 }
 
 .filme-card img,
@@ -36,6 +45,13 @@
   margin: 0;
 }
 
+.nota {
+  align-self: flex-start;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #d9a441;
+}
+
 .sinopse {
   font-size: 0.78rem;
   color: #a8afc2;
@@ -61,6 +77,9 @@ button {
   color: white;
   font-weight: 600;
   font-size: 0.8rem;
+}
+
+.acoes button {
   flex: 1;
 }
 
@@ -84,19 +103,117 @@ button.favorito-ativo:hover {
   background: #454f6b;
 }
 
-dialog.dialog-comentarios {
+dialog.dialog-detalhes {
   position: relative;
   background: #1a1f2b;
   color: #e8e8ec;
   border: none;
-  border-radius: 10px;
-  padding: 1.25rem;
-  max-width: 480px;
-  width: 90%;
+  border-radius: 12px;
+  padding: 0;
+  max-width: 640px;
+  width: 92%;
+  max-height: 85vh;
 }
 
-dialog.dialog-comentarios::backdrop {
+dialog.dialog-detalhes::backdrop {
   background: rgba(0, 0, 0, 0.6);
+}
+
+.dialog-conteudo {
+  position: relative;
+  padding: 1.5rem;
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.btn-fechar {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 50%;
+  background: #333a4d;
+  font-size: 0.9rem;
+  flex: none;
+}
+
+.btn-fechar:hover {
+  background: #454f6b;
+}
+
+.dialog-cabecalho {
+  display: flex;
+  gap: 1.1rem;
+  margin-bottom: 1.2rem;
+  padding-right: 2rem;
+}
+
+.dialog-poster {
+  width: 110px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  flex: none;
+}
+
+.dialog-info h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.2rem;
+}
+
+.nota-grande {
+  margin: 0 0 0.5rem;
+  font-weight: 700;
+  color: #d9a441;
+}
+
+.nota-grande span {
+  color: #a8afc2;
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+
+.sinopse-completa {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #a8afc2;
+  line-height: 1.5;
+}
+
+.abas {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid #333a4d;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.abas button {
+  background: none;
+  color: #a8afc2;
+  padding: 0.55rem 0.2rem;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  font-size: 0.85rem;
+  margin-right: 0.8rem;
+}
+
+.abas button:hover {
+  background: none;
+  color: #e8e8ec;
+}
+
+.abas button.ativa {
+  color: #e8e8ec;
+  border-bottom-color: #d9a441;
+}
+
+.aba-conteudo {
+  min-height: 120px;
 }
 
 .lista-comentarios {
@@ -104,7 +221,7 @@ dialog.dialog-comentarios::backdrop {
   padding: 0;
   max-height: 200px;
   overflow-y: auto;
-  margin: 0.75rem 0;
+  margin: 0 0 0.75rem;
 }
 
 .lista-comentarios li {
@@ -121,6 +238,17 @@ dialog.dialog-comentarios::backdrop {
   justify-content: center;
 }
 
+.comentario-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.comentario-autor {
+  font-size: 0.78rem;
+  color: #d9a441;
+}
+
 .btn-remover {
   flex: none;
   background: #333a4d;
@@ -131,7 +259,6 @@ form {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
 }
 
 textarea {
@@ -158,4 +285,94 @@ textarea {
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   margin: 0 0 0.5rem;
+}
+
+.lista-provedores {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.lista-provedores li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  width: 84px;
+  text-align: center;
+}
+
+.lista-provedores img,
+.logo-vazio {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #0f121a;
+}
+
+.logo-vazio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #a8afc2;
+}
+
+.provedor-nome {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.provedor-tipo {
+  font-size: 0.68rem;
+  color: #a8afc2;
+}
+
+.lista-elenco {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 0.9rem;
+}
+
+.lista-elenco li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  text-align: center;
+}
+
+.lista-elenco img,
+.foto-vazia {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #0f121a;
+}
+
+.foto-vazia {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #a8afc2;
+}
+
+.ator-nome {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.ator-personagem {
+  font-size: 0.7rem;
+  color: #a8afc2;
 }

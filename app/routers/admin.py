@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import UsuarioAutenticado, require_admin
 from app.database import get_db
 from app.models import Comentario
+from app.routers.comments import _to_out
 from app.schemas.comment import CommentOut
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -16,7 +17,8 @@ def listar_todos_comentarios(
 ) -> list[CommentOut]:
     """Só admin: lista comentários de TODOS os usuários (moderação), não só
     os do chamador — diferença de autorização que o `role` do JWT decide."""
-    return db.query(Comentario).order_by(Comentario.criado_em.desc()).all()
+    comentarios = db.query(Comentario).order_by(Comentario.criado_em.desc()).all()
+    return [_to_out(c, usuario_atual.id) for c in comentarios]
 
 
 @router.delete("/comments/{comentario_id}", status_code=status.HTTP_204_NO_CONTENT)

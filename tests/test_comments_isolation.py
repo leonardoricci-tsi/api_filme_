@@ -39,17 +39,28 @@ def test_rota_de_comentarios_exige_autenticacao(client):
     assert resposta.status_code == 401
 
 
-def test_usuario_b_nao_ve_comentario_de_usuario_a_na_listagem(client):
-    token_a = criar_token()
-    token_b = criar_token()
+def test_comentarios_de_um_filme_sao_publicos_com_nome_de_quem_comentou(client):
+    """Filtrando por tmdb_movie_id, a listagem vira uma conversa pública: todo
+    mundo vê o comentário (e o nome) de todo mundo — só apagar é restrito."""
+    token_a = criar_token(nome="Ana")
+    token_b = criar_token(nome="Beto")
 
-    criar_comentario(client, token_a, tmdb_movie_id=99)
+    comentario_a = criar_comentario(client, token_a, tmdb_movie_id=99)
 
     resposta = client.get(
         "/comments", params={"tmdb_movie_id": 99}, headers=auth_headers(token_b)
     )
     assert resposta.status_code == 200
-    assert resposta.json() == []
+    corpo = resposta.json()
+    assert len(corpo) == 1
+    assert corpo[0]["id"] == comentario_a["id"]
+    assert corpo[0]["nome_usuario"] == "Ana"
+    assert corpo[0]["meu"] is False  # é da Ana, não do Beto que está listando
+
+    resposta_a = client.get(
+        "/comments", params={"tmdb_movie_id": 99}, headers=auth_headers(token_a)
+    )
+    assert resposta_a.json()[0]["meu"] is True  # o mesmo comentário, visto pela própria autora
 
 
 def test_usuario_b_nao_consegue_deletar_comentario_de_usuario_a(client):

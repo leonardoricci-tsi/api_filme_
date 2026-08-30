@@ -16,6 +16,7 @@ class UsuarioAutenticado:
 
     id: int
     role: str
+    nome: str
 
 
 def get_current_user(
@@ -40,7 +41,11 @@ def get_current_user(
     except (KeyError, ValueError, TypeError) as erro:
         raise credenciais_invalidas from erro
 
-    return UsuarioAutenticado(id=usuario_id, role=role)
+    # .get com fallback: tokens emitidos antes do claim `nome` existir ainda
+    # circulam até expirar (JWT_EXPIRE_MINUTES) — não podem virar 401 por isso.
+    nome = payload.get("nome") or ""
+
+    return UsuarioAutenticado(id=usuario_id, role=role, nome=nome)
 
 
 def require_admin(

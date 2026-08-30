@@ -12,7 +12,11 @@ import {
 import { FormsModule } from '@angular/forms';
 
 import { CommentsService } from '../../core/services/comments.service';
+import { MoviesService } from '../../core/services/movies.service';
 import { MovieComment } from '../../models/comment.model';
+import { DetalhesFilme } from '../../models/movie.model';
+
+type Aba = 'comentarios' | 'assistir' | 'elenco';
 
 @Component({
   selector: 'app-movie-card',
@@ -27,11 +31,14 @@ export class MovieCard implements OnDestroy {
   @Input() posterUrl: string | null = null;
   @Input() posterPath: string | null = null;
   @Input() sinopse: string | null = null;
+  @Input() nota: number | null = null;
   @Input() isFavorito = false;
 
   @Output() toggleFavorito = new EventEmitter<void>();
 
-  @ViewChild('dialogComentarios') dialogRef?: ElementRef<HTMLDialogElement>;
+  @ViewChild('dialogDetalhes') dialogRef?: ElementRef<HTMLDialogElement>;
+
+  abaAtiva = signal<Aba>('comentarios');
 
   // Estado atualizado dentro de callbacks assíncronos (HTTP) precisa ser
   // signal — sem zone.js, mutar um campo comum aqui não dispara re-render.
@@ -39,27 +46,65 @@ export class MovieCard implements OnDestroy {
   carregandoComentarios = signal(false);
   erro = signal('');
   sucesso = signal('');
-
-  // Também é signal: é limpo dentro do callback assíncrono do POST
-  // (mesmo motivo dos campos acima).
   novoComentario = signal('');
+
+  detalhes = signal<DetalhesFilme | null>(null);
+  carregandoDetalhes = signal(false);
+  erroDetalhes = signal('');
 
   private timeoutSucesso?: ReturnType<typeof setTimeout>;
 
-  constructor(private readonly commentsService: CommentsService) {}
+  constructor(
+    private readonly commentsService: CommentsService,
+    private readonly moviesService: MoviesService,
+  ) {}
 
   ngOnDestroy(): void {
     clearTimeout(this.timeoutSucesso);
   }
 
-  abrirComentarios(): void {
+  abrirModal(): void {
+    this.abaAtiva.set('comentarios');
     this.carregarComentarios();
     this.dialogRef?.nativeElement.showModal();
   }
 
-  fecharComentarios(): void {
+  fecharModal(): void {
     this.dialogRef?.nativeElement.close();
     this.limparSucesso();
+  }
+
+  fecharSeClicouFora(evento: MouseEvent): void {
+    if (evento.target === this.dialogRef?.nativeElement) {
+      this.fecharModal();
+    }
+  }
+
+  favoritar(evento: Event): void {
+    evento.stopPropagation();
+    this.toggleFavorito.emit();
+  }
+
+  selecionarAba(aba: Aba): void {
+    this.abaAtiva.set(aba);
+    if (aba !== 'comentarios' && this.detalhes() === null && !this.carregandoDetalhes()) {
+      this.carregarDetalhes();
+    }
+  }
+
+  private carregarDetalhes(): void {
+    this.carregandoDetalhes.set(true);
+    this.erroDetalhes.set('');
+    this.moviesService.detalhes(this.tmdbMovieId).subscribe({
+      next: (detalhes) => {
+        this.detalhes.set(detalhes);
+        this.carregandoDetalhes.set(false);
+      },
+      error: () => {
+        this.erroDetalhes.set('Não foi possível carregar essas informações agora.');
+        this.carregandoDetalhes.set(false);
+      },
+    });
   }
 
   private mostrarSucesso(mensagem: string): void {
