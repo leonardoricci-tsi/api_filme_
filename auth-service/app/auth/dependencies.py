@@ -30,3 +30,9 @@ def get_current_user(
     if usuario is None:
         raise credenciais_invalidas
     return usuario
+
+
+def require_admin(usuario_atual: Usuario = Depends(get_current_user)) -> Usuario:
+    if usuario_atual.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso restrito a admins")
+    return usuario_atual

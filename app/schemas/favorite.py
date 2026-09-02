@@ -17,3 +17,10 @@ class FavoriteOut(BaseModel):
     titulo: str
     poster_path: str | None
     criado_em: datetime
+
+
+class AdminFavoriteOut(FavoriteOut):
+    """Só pra listagem de moderação (`GET /admin/favorites`) — expõe de
+    quem é o favorito, já que ali não é "os meus", é "os de todo mundo"."""
+
+    usuario_id: int

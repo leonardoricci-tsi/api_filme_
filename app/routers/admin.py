@@ -3,9 +3,10 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import UsuarioAutenticado, require_admin
 from app.database import get_db
-from app.models import Comentario
+from app.models import Comentario, Favorito
 from app.routers.comments import _to_out
 from app.schemas.comment import CommentOut
+from app.schemas.favorite import AdminFavoriteOut
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -34,4 +35,30 @@ def deletar_comentario_de_qualquer_usuario(
     if comentario is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recurso não encontrado")
     db.delete(comentario)
+    db.commit()
+
+
+@router.get("/favorites", response_model=list[AdminFavoriteOut])
+def listar_todos_favoritos(
+    _usuario_atual: UsuarioAutenticado = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> list[Favorito]:
+    """Só admin: lista favoritos de TODOS os usuários — mesma lógica de
+    moderação de `GET /admin/comments`, agora pra favoritos."""
+    return db.query(Favorito).order_by(Favorito.criado_em.desc()).all()
+
+
+@router.delete("/favorites/{favorito_id}", status_code=status.HTTP_204_NO_CONTENT)
+def deletar_favorito_de_qualquer_usuario(
+    favorito_id: int,
+    _usuario_atual: UsuarioAutenticado = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> None:
+    """Só admin: remove o favorito de QUALQUER usuário, sem checar
+    ownership — ao contrário de DELETE /favorites/{id}, que só apaga o
+    próprio."""
+    favorito = db.get(Favorito, favorito_id)
+    if favorito is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recurso não encontrado")
+    db.delete(favorito)
     db.commit()
