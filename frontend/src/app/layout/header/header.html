@@ -8,8 +8,10 @@
     <a routerLink="/app" routerLinkActive="ativo" [routerLinkActiveOptions]="{ exact: true }">
       Catálogo
     </a>
-    <a routerLink="/app/favoritos" routerLinkActive="ativo">Favoritos</a>
-    <a routerLink="/app/comentarios" routerLinkActive="ativo">Comentários</a>
+    @if (authService.temPapelMinimo('nerd')) {
+      <a routerLink="/app/favoritos" routerLinkActive="ativo">Favoritos</a>
+      <a routerLink="/app/comentarios" routerLinkActive="ativo">Comentários</a>
+    }
   </nav>
 
   <div class="perfil">
@@ -19,9 +21,7 @@
       <div class="menu-perfil">
         <div class="linha-nome">
           <p class="nome">{{ authService.usuario()?.nome }}</p>
-          <span class="tag-role" [class.admin]="authService.usuario()?.role === 'admin'">
-            {{ authService.usuario()?.role === 'admin' ? 'Admin' : 'Usuário' }}
-          </span>
+          <span class="tag-role" [class.admin]="authService.isAdmin()">{{ nomePapel }}</span>
         </div>
         <p class="email">{{ authService.usuario()?.email }}</p>
         <button class="btn-sair" (click)="sair()">Sair</button>

@@ -4,6 +4,13 @@ import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 
 import { AuthService } from '../../core/services/auth.service';
 
+const NOME_PAPEL: Record<string, string> = {
+  cinefilo: 'Cinéfilo',
+  nerd: 'Nerd',
+  stalker_do_tomhanks: 'Stalker do Tom Hanks',
+  admin: 'Admin',
+};
+
 @Component({
   selector: 'app-header',
   standalone: true,
@@ -22,6 +29,11 @@ export class Header {
   get iniciais(): string {
     const nome = this.authService.usuario()?.nome ?? '?';
     return nome.trim().charAt(0).toUpperCase();
+  }
+
+  get nomePapel(): string {
+    const papel = this.authService.usuario()?.role ?? '';
+    return NOME_PAPEL[papel] ?? papel;
   }
 
   toggleMenu(): void {

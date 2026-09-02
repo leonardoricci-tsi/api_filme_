@@ -21,6 +21,16 @@ export interface UsuarioLogado {
   role: string;
 }
 
+// Espelha app/auth/dependencies.py::NIVEL_PAPEL, só pra decidir o que
+// mostrar na tela — quem garante permissão de verdade é sempre o backend
+// (403 mesmo chamando o endpoint direto), isso aqui é só UX.
+const NIVEL_PAPEL: Record<string, number> = {
+  cinefilo: 1,
+  nerd: 2,
+  stalker_do_tomhanks: 3,
+  admin: 4,
+};
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly _token = signal<string | null>(localStorage.getItem(TOKEN_KEY));
@@ -40,6 +50,18 @@ export class AuthService {
 
   getToken(): string | null {
     return this._token();
+  }
+
+  temPapelMinimo(papelMinimo: string): boolean {
+    const papel = this._usuario()?.role;
+    if (!papel) {
+      return false;
+    }
+    return (NIVEL_PAPEL[papel] ?? 0) >= (NIVEL_PAPEL[papelMinimo] ?? Infinity);
+  }
+
+  isAdmin(): boolean {
+    return this._usuario()?.role === 'admin';
   }
 
   login(payload: LoginPayload): Observable<UsuarioLogado> {
