@@ -20,9 +20,10 @@ _CAST_QUIZ = [
     {
         "id": i,
         "title": titulo,
-        "overview": "",
+        "overview": f"Sinopse de {titulo}.",
         "poster_path": f"/poster{i}.jpg",
         "release_date": "2000-01-01",
+        "vote_average": 7.5,
     }
     for i, titulo in enumerate(
         ["Forrest Gump", "Cast Away", "Big", "A Toy Story", "The Terminal"], start=1
@@ -108,7 +109,12 @@ def test_stalker_acerta_resposta_do_quiz(client):
     )
 
     assert resposta_final.status_code == 200
-    assert resposta_final.json()["correto"] is True
+    corpo = resposta_final.json()
+    assert corpo["correto"] is True
+    assert corpo["sinopse"] == f"Sinopse de {corpo['resposta_certa']}."
+    assert corpo["poster_url"] is not None
+    assert corpo["data_lancamento"] == "2000-01-01"
+    assert corpo["nota"] == 7.5
 
 
 @respx.mock

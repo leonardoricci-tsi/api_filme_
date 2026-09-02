@@ -15,3 +15,7 @@ class QuizRespostaIn(BaseModel):
 class QuizRespostaOut(BaseModel):
     correto: bool
     resposta_certa: str
+    sinopse: str
+    poster_url: str | None
+    data_lancamento: str | None
+    nota: float | None

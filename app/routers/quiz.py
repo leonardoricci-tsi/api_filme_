@@ -112,4 +112,11 @@ def responder_quiz_pixelado(
 
     titulo_certo = filme_correto["titulo"]
     correto = dados.resposta.strip().lower() == titulo_certo.strip().lower()
-    return QuizRespostaOut(correto=correto, resposta_certa=titulo_certo)
+    return QuizRespostaOut(
+        correto=correto,
+        resposta_certa=titulo_certo,
+        sinopse=filme_correto["sinopse"],
+        poster_url=filme_correto["poster_url"],
+        data_lancamento=filme_correto["data_lancamento"],
+        nota=filme_correto["nota"],
+    )

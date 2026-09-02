@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 
 import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
+import { roleGuard } from './core/guards/role.guard';
 import { AppShell } from './layout/app-shell/app-shell';
 
 export const routes: Routes = [
@@ -42,6 +43,11 @@ export const routes: Routes = [
       {
         path: 'comentarios',
         loadComponent: () => import('./features/comments/comments').then((m) => m.Comments),
+      },
+      {
+        path: 'quiz',
+        canActivate: [roleGuard('stalker_do_tomhanks')],
+        loadComponent: () => import('./features/quiz/quiz').then((m) => m.Quiz),
       },
     ],
   },

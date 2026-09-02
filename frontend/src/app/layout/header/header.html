@@ -12,6 +12,9 @@
       <a routerLink="/app/favoritos" routerLinkActive="ativo">Favoritos</a>
       <a routerLink="/app/comentarios" routerLinkActive="ativo">Comentários</a>
     }
+    @if (authService.temPapelMinimo('stalker_do_tomhanks')) {
+      <a routerLink="/app/quiz" routerLinkActive="ativo">Quiz</a>
+    }
   </nav>
 
   <div class="perfil">
