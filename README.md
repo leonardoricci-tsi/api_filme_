@@ -33,8 +33,41 @@ Navegador ──HTTPS──▶ Catálogo (api)                MySQL
 - O `auth-service` não tem `ports:` no `docker-compose.yml` — só `expose: "8001"`, acessível apenas de dentro da rede `catalog-net`, pelo nome do serviço (`http://auth-service:8001`).
 - O catálogo é o único container com porta publicada pro host. Toda rota `/auth/*` (registro, login, perfil, esqueci-senha, redefinir senha) é recebida pelo catálogo e repassada internamente pro `auth-service` (`app/services/auth_client.py`).
 - Fora de `/auth/*`, o catálogo **não** chama o `auth-service` a cada request: o JWT é assinado pelo `auth-service` mas verificado localmente pelo catálogo (mesmo `JWT_SECRET` nos dois), o que evita um round-trip de rede em toda chamada autenticada.
-- O JWT carrega um claim `role` (`usuario` ou `admin`); rotas de moderação (`/admin/*`) exigem `role=admin`.
+- O JWT carrega um claim `role`; toda rota sensível decide o que aceitar olhando só pra esse claim — nunca por nada que o cliente mande. Veja a seção [Autorização (RBAC)](#autorização-rbac-atividade-4) logo abaixo pros papéis e permissões de verdade.
 - O catálogo não é mais dono da tabela `usuarios` — as FKs de `favoritos`/`comentarios` pra `usuarios` foram removidas; o isolamento entre usuários continua garantido, só que via `usuario_id` extraído do JWT, não mais por FK no banco.
+
+## Autorização (RBAC, atividade 4)
+
+**Atividade 4 — controle de acesso por papel:** o campo `role` existia desde a atividade 3, mas não decidia nada — qualquer papel conseguia fazer qualquer coisa. Agora ele decide de verdade, e quem decide é sempre o servidor, nunca a tela: esconder um botão no Angular não é segurança, é só interface. Toda ação sensível é recusada com `403` no backend pra quem não tem o papel certo, mesmo chamando o endpoint direto pelo Postman/curl.
+
+### Papéis e permissões
+
+Quatro papéis, empilhados — cada um inclui a permissão do anterior, `admin` é o topo: consome tudo que `stalker_do_tomhanks` consome **e** ainda modera.
+
+| Papel | Pode fazer |
+|---|---|
+| `cinefilo` (papel padrão no cadastro) | Ver o catálogo de filmes (`GET /movies`, `GET /movies/{id}/detalhes`) |
+| `nerd` | Tudo de `cinefilo` **+** comentar e favoritar filmes (`/comments/*`, `/favorites/*`) |
+| `stalker_do_tomhanks` | Tudo de `nerd` **+** jogar o quiz do pôster pixelado (`/quiz/pixelado`, exclusivo desse papel pra cima) |
+| `admin` | Tudo de `stalker_do_tomhanks` **+** exclusivo dele: apagar comentário/favorito de **qualquer** usuário (`/admin/comments/*`, `/admin/favorites/*`) e listar/promover/rebaixar o papel de qualquer usuário (`GET /auth/admin/users`, `PATCH /auth/admin/users/{id}/role`) |
+
+A escada de nível fica em `app/auth/dependencies.py` (`NIVEL_PAPEL`, `require_papel_minimo`) — `admin` tem o nível mais alto (4), então qualquer rota que exija `nerd`+ ou `stalker_do_tomhanks`+ já libera admin de graça, sem precisar listar o papel em cada rota. As ações **exclusivas** de admin (moderação, promoção) usam uma segunda dependência, `require_admin`, que exige o papel exato — não é "nível mínimo", é "só esse papel mesmo".
+
+### Ação exclusiva de admin
+
+Duas frentes, ambas só admin:
+- **Moderação:** `DELETE /admin/comments/{id}` e `DELETE /admin/favorites/{id}` apagam o comentário/favorito de qualquer usuário (não só o próprio); `GET /admin/comments` e `GET /admin/favorites` listam de todo mundo. Tudo dentro do catálogo, checado localmente (`app/routers/admin.py`, `require_admin`).
+- **Gestão de usuário:** `GET /auth/admin/users` + `PATCH /auth/admin/users/{id}/role` lista usuários e muda o papel de qualquer um. Como a tabela `usuarios` pertence ao `auth-service` (não ao catálogo, desde a atividade 3), a checagem de `role == "admin"` acontece lá (`auth-service/app/auth/dependencies.py::require_admin`) — o catálogo só repassa a chamada (`app/routers/auth.py`), do mesmo jeito que já repassa `/auth/register` e `/auth/login`.
+
+### Quiz do pôster pixelado (exclusivo de `stalker_do_tomhanks`)
+
+`GET /quiz/pixelado` sorteia um filme do Tom Hanks, baixa o pôster de verdade da TMDB (ao vivo, nunca persistido) e devolve ele pixelado + 4 opções de título. `POST /quiz/pixelado/resposta` confere o palpite — **sempre no servidor**: o cliente nunca recebe a resposta certa antes de enviar a tentativa, só um `round_id` assinado (JWT com o `id` do filme, mesmo `JWT_SECRET` do login) que ele não consegue forjar nem decodificar sem a chave. É o mesmo princípio do RBAC aplicado a outra coisa: nunca confiar em nada que o cliente diga sobre si mesmo.
+
+### Padrão A (centralizado) ou Padrão B (claims no JWT)?
+
+**Padrão B.** O catálogo nunca faz uma chamada de rede pro `auth-service` pra decidir uma permissão em `/comments`, `/favorites` ou `/quiz/*` — o `role` já vem dentro do JWT, assinado, e `require_papel_minimo`/`require_admin` só leem o claim localmente (`app/auth/dependencies.py`). É a exceção de propósito: `/admin/users*` (listar/promover usuário) *é* uma chamada de rede ao `auth-service`, mas não pra checar permissão — é porque a tabela `usuarios` mora lá, não no catálogo; a checagem de `role == "admin"` em si acontece toda dentro do `auth-service`, sem round-trip nenhum.
+
+**Se fosse pro Padrão A:** cada rota de `/comments`, `/favorites` e `/quiz/*` deixaria de ler `usuario_atual.role` do dataclass `UsuarioAutenticado` (que hoje só decodifica o JWT) e passaria a chamar um endpoint novo tipo `POST /auth/pode?acao=comentar` no `auth-service` a cada requisição, esperar a resposta, e só então seguir. Ganharia revogação imediata (rebaixar um `stalker_do_tomhanks` pra `cinefilo` valeria na próxima requisição dele, não só quando o token expirar); perderia velocidade (round-trip de rede extra em toda ação, não só nas de admin) e adicionaria uma dependência de disponibilidade — se o `auth-service` cair, `/comments` e `/favorites` param de funcionar até pra quem já tinha token válido, porque não teria mais como confirmar o papel.
 
 ## Recuperação de senha (esqueci minha senha)
 
@@ -148,37 +181,45 @@ Os testes usam SQLite em memória (não tocam no MySQL configurado em `.env`), m
 | POST | `/auth/forgot-password` | não | Proxy pro `auth-service` — pede o link de redefinição por e-mail |
 | POST | `/auth/reset-password` | não | Proxy pro `auth-service` — troca a senha usando o token do e-mail |
 | GET | `/movies` | não | Lista filmes do Tom Hanks (dados ao vivo da TMDB, com sinopse; cache em memória de 5 min) |
-| POST | `/favorites` | sim | Favorita um filme |
-| GET | `/favorites` | sim | Lista favoritos do usuário logado |
-| DELETE | `/favorites/{id}` | sim | Remove um favorito do usuário logado |
-| POST | `/comments` | sim | Comenta um filme (envia `titulo` do filme junto) |
-| GET | `/comments` | sim | Lista **todos** os comentários do usuário logado |
-| GET | `/comments?tmdb_movie_id=` | sim | Lista comentários do usuário logado sobre um filme específico |
-| DELETE | `/comments/{id}` | sim | Remove um comentário do usuário logado |
+| POST | `/favorites` | sim (nerd+) | Favorita um filme |
+| GET | `/favorites` | sim (nerd+) | Lista favoritos do usuário logado |
+| DELETE | `/favorites/{id}` | sim (nerd+) | Remove um favorito do usuário logado |
+| POST | `/comments` | sim (nerd+) | Comenta um filme (envia `titulo` do filme junto) |
+| GET | `/comments` | sim (nerd+) | Lista **todos** os comentários do usuário logado |
+| GET | `/comments?tmdb_movie_id=` | sim (nerd+) | Lista comentários do usuário logado sobre um filme específico |
+| DELETE | `/comments/{id}` | sim (nerd+) | Remove um comentário do usuário logado |
+| GET | `/quiz/pixelado` | sim (stalker+) | Sorteia um filme, devolve o pôster pixelado + 4 opções de título |
+| POST | `/quiz/pixelado/resposta` | sim (stalker+) | Confere o palpite — checagem sempre no servidor |
 | GET | `/admin/comments` | sim (admin) | Lista comentários de **todos** os usuários (moderação) |
 | DELETE | `/admin/comments/{id}` | sim (admin) | Remove o comentário de qualquer usuário |
+| GET | `/admin/favorites` | sim (admin) | Lista favoritos de **todos** os usuários (moderação) |
+| DELETE | `/admin/favorites/{id}` | sim (admin) | Remove o favorito de qualquer usuário |
+| GET | `/auth/admin/users` | sim (admin) | Proxy pro `auth-service` — lista todos os usuários cadastrados |
+| PATCH | `/auth/admin/users/{id}/role` | sim (admin) | Proxy pro `auth-service` — promove/rebaixa o papel de um usuário |
 
-Autenticação via header `Authorization: Bearer <token>`.
+Autenticação via header `Authorization: Bearer <token>`. "nerd+" = `nerd`, `stalker_do_tomhanks` ou `admin`; "stalker+" = `stalker_do_tomhanks` ou `admin` — a escada é cumulativa (veja [Autorização (RBAC)](#autorização-rbac-atividade-4)).
 
 ### auth-service (interno, sem acesso externo)
-Só respondem pra chamadas vindas do catálogo, dentro da rede `catalog-net`: `/auth/register`, `/auth/login`, `/auth/me`, `/auth/forgot-password`, `/auth/reset-password`.
+Só respondem pra chamadas vindas do catálogo, dentro da rede `catalog-net`: `/auth/register`, `/auth/login`, `/auth/me`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/admin/users`, `/auth/admin/users/{id}/role`.
 
 ## Estrutura do projeto
 ```
 app/                    # catálogo
   models/       # SQLAlchemy declarative models (favoritos, comentarios)
   schemas/      # Pydantic (request/response)
-  auth/         # verificação local do JWT (dependência get_current_user, require_admin)
-  routers/      # rotas da API, incluindo o proxy de /auth/* pro auth-service
+  auth/         # verificação local do JWT (get_current_user, require_papel_minimo, require_admin)
+  routers/      # rotas da API: quiz.py (pixelado, stalker+), admin.py (moderação de comentários e favoritos),
+                #   auth.py (proxy de /auth/* e /auth/admin/* pro auth-service), comments/favorites (nerd+)
   services/     # cliente HTTP do auth-service (auth_client.py) + cliente da TMDB (dados ao vivo, com cache)
   static/       # build de produção do Angular (gerado por `npm run build`, não editar à mão)
 alembic/        # migrations do catálogo
-tests/          # pytest (SQLite em memória + mocks da TMDB e do auth-service)
+tests/          # pytest (SQLite em memória + mocks da TMDB e do auth-service), test_roles.py cobre o RBAC
 auth-service/           # microsserviço de autenticação
   app/
-    models/     # Usuario (com role), ResetToken
-    auth/       # hash de senha, emissão/validação de JWT, geração e validação de reset tokens
-    routers/    # /auth/* (register, login, me) e /auth/forgot-password, /auth/reset-password
+    models/     # Usuario (com role: cinefilo/nerd/stalker_do_tomhanks/admin), ResetToken
+    auth/       # hash de senha, emissão/validação de JWT, geração e validação de reset tokens, require_admin
+    routers/    # /auth/* (register, login, me), /auth/forgot-password, /auth/reset-password,
+                #   /auth/admin/users e /auth/admin/users/{id}/role (admin.py, atividade 4)
     services/   # mailer.py — envio do e-mail de redefinição via SMTP
   alembic/      # migrations do auth-service (histórico próprio, alembic_version_auth)
 frontend/       # projeto Angular (standalone components)
@@ -196,10 +237,22 @@ docker-compose.yml      # os dois serviços (api, auth-service) + rede compartil
 - Toda query de favoritos/comentários filtra obrigatoriamente por `usuario_id` do usuário logado (`app/routers/_ownership.py`).
 - O JWT é assinado só pelo `auth-service`; o catálogo apenas verifica a assinatura com o `JWT_SECRET` compartilhado — não existe endpoint que aceite `role` ou `usuario_id` vindos do cliente.
 - Token de redefinição de senha: aleatório e criptograficamente seguro (`secrets.token_urlsafe`, não um UUID sequencial), expira em 30 minutos, é de uso único, e a mensagem de "esqueci minha senha" nunca revela se o e-mail existe ou não.
-- Promoção de usuário pra `admin` é feita manualmente no banco (não existe endpoint nem script commitado pra isso) — é uma ação pontual de quem administra o sistema, não uma feature da aplicação.
+- Promover/rebaixar o papel de um usuário é `PATCH /auth/admin/users/{id}/role` — só admin (atividade 4). O **primeiro** admin do sistema, esse sim, precisa ser promovido manualmente no banco (`UPDATE usuarios SET role='admin' WHERE id=...`), já que ninguém nasce admin — é o único bootstrap que não tem endpoint de propósito.
 - `npm run build` copia `index.html` para `404.html` em `app/static` (truque padrão do Starlette pra SPA): assim, um refresh direto numa rota do Angular (ex: `/favoritos`) ainda carrega o app em vez de um 404 vazio.
 
 ## Evidências
+
+### Atividade 4 — RBAC: mesma ação, dois papéis
+
+Mesma chamada (`PATCH /auth/admin/users/{id}/role`, promover um usuário), dois tokens diferentes — o `cinefilo` é recusado, o `admin` executa. Validado por curl direto no `auth-service` local antes do print (respostas reais, não simuladas): `cinefilo` → `403 {"detail":"Acesso restrito a admins"}`, `admin` → `200` com o `role` do usuário-alvo atualizado.
+
+**1. Usuário comum (`cinefilo`) tentando promover alguém — recusado com 403:**
+
+![Usuário comum recebe 403 ao tentar ação de admin](docs/evidencias/rbac-403-comum.png)
+
+**2. Admin de verdade fazendo a mesma chamada — sucesso:**
+
+![Admin executa a promoção com sucesso](docs/evidencias/rbac-200-admin.png)
 
 Evidências pedidas pelo professor pra atividade 3 — fluxo completo de recuperação de senha e confirmação de que o `auth-service` não é acessível de fora.
 
