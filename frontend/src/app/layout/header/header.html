@@ -15,6 +15,9 @@
     @if (authService.temPapelMinimo('stalker_do_tomhanks')) {
       <a routerLink="/app/quiz" routerLinkActive="ativo">Quiz</a>
     }
+    @if (authService.isAdmin()) {
+      <a routerLink="/app/admin" routerLinkActive="ativo">Admin</a>
+    }
   </nav>
 
   <div class="perfil">

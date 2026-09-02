@@ -2,7 +2,7 @@ import { Routes } from '@angular/router';
 
 import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
-import { roleGuard } from './core/guards/role.guard';
+import { adminGuard, roleGuard } from './core/guards/role.guard';
 import { AppShell } from './layout/app-shell/app-shell';
 
 export const routes: Routes = [
@@ -48,6 +48,11 @@ export const routes: Routes = [
         path: 'quiz',
         canActivate: [roleGuard('stalker_do_tomhanks')],
         loadComponent: () => import('./features/quiz/quiz').then((m) => m.Quiz),
+      },
+      {
+        path: 'admin',
+        canActivate: [adminGuard],
+        loadComponent: () => import('./features/admin/admin').then((m) => m.Admin),
       },
     ],
   },

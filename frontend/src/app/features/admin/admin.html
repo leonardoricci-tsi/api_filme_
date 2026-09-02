@@ -1,0 +1,102 @@
+<h1>Painel de admin</h1>
+
+<div class="abas">
+  <button class="btn-aba" [class.ativa]="abaAtiva() === 'usuarios'" (click)="trocarAba('usuarios')">
+    Usuários
+  </button>
+  <button
+    class="btn-aba"
+    [class.ativa]="abaAtiva() === 'comentarios'"
+    (click)="trocarAba('comentarios')"
+  >
+    Comentários
+  </button>
+  <button
+    class="btn-aba"
+    [class.ativa]="abaAtiva() === 'favoritos'"
+    (click)="trocarAba('favoritos')"
+  >
+    Favoritos
+  </button>
+</div>
+
+@if (abaAtiva() === 'usuarios') {
+  @if (carregandoUsuarios()) {
+    <p>Carregando...</p>
+  } @else if (usuarios().length === 0) {
+    <p class="vazio">Nenhum usuário cadastrado.</p>
+  } @else {
+    <table class="tabela">
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>E-mail</th>
+          <th>Papel</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (usuario of usuarios(); track usuario.id) {
+          <tr>
+            <td>{{ usuario.nome }}</td>
+            <td class="email">{{ usuario.email }}</td>
+            <td>
+              <select
+                class="select-papel"
+                (change)="alterarPapel(usuario, $any($event.target).value)"
+              >
+                @for (papel of PAPEIS; track papel) {
+                  <option [value]="papel" [selected]="papel === usuario.role">{{ papel }}</option>
+                }
+              </select>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+}
+
+@if (abaAtiva() === 'comentarios') {
+  @if (carregandoComentarios()) {
+    <p>Carregando...</p>
+  } @else if (comentarios().length === 0) {
+    <p class="vazio">Nenhum comentário cadastrado.</p>
+  } @else {
+    <ul class="lista">
+      @for (comentario of comentarios(); track comentario.id) {
+        <li>
+          <div class="conteudo">
+            <div class="cabecalho">
+              <strong>{{ comentario.nome_usuario || 'Usuário #' + comentario.id }}</strong>
+              <button class="btn-remover" (click)="removerComentario(comentario)">Remover</button>
+            </div>
+            <p class="filme">{{ comentario.titulo || 'Filme #' + comentario.tmdb_movie_id }}</p>
+            <p>{{ comentario.texto }}</p>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+}
+
+@if (abaAtiva() === 'favoritos') {
+  @if (carregandoFavoritos()) {
+    <p>Carregando...</p>
+  } @else if (favoritos().length === 0) {
+    <p class="vazio">Nenhum favorito cadastrado.</p>
+  } @else {
+    <ul class="lista">
+      @for (favorito of favoritos(); track favorito.id) {
+        <li>
+          <div class="conteudo">
+            <div class="cabecalho">
+              <strong>{{ favorito.titulo }}</strong>
+              <button class="btn-remover" (click)="removerFavorito(favorito)">Remover</button>
+            </div>
+            <p class="filme">Usuário #{{ favorito.usuario_id }}</p>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+}
