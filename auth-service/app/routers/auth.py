@@ -20,7 +20,7 @@ def register(dados: RegisterIn, db: Session = Depends(get_db)) -> TokenOut:
         nome=dados.nome,
         email=dados.email,
         senha_hash=hash_password(dados.senha),
-        role="usuario",
+        role="cinefilo",
     )
     db.add(usuario)
     db.commit()

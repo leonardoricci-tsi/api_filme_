@@ -54,3 +54,31 @@ def require_admin(
     if usuario_atual.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso restrito a admins")
     return usuario_atual
+
+
+# Escada de papéis — cada um inclui a permissão do anterior. "admin" é o
+# topo: consome tudo que stalker_do_tomhanks consome (comenta, favorita,
+# joga o quiz) e ainda modera (require_admin acima cobre as ações
+# exclusivas dele: apagar comentário/favorito de qualquer um, promover
+# usuário) — não é um papel à parte, é o "máximo do máximo".
+NIVEL_PAPEL = {"cinefilo": 1, "nerd": 2, "stalker_do_tomhanks": 3, "admin": 4}
+
+
+def require_papel_minimo(papel_minimo: str):
+    """Fábrica de dependência: recusa com 403 quem tiver um papel de nível
+    abaixo do exigido. O nível vem do claim `role` do JWT — nunca de nada
+    que o cliente possa mandar na requisição."""
+    nivel_exigido = NIVEL_PAPEL[papel_minimo]
+
+    def dependencia(
+        usuario_atual: UsuarioAutenticado = Depends(get_current_user),
+    ) -> UsuarioAutenticado:
+        nivel_usuario = NIVEL_PAPEL.get(usuario_atual.role, 0)
+        if nivel_usuario < nivel_exigido:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Ação exige papel '{papel_minimo}' ou superior",
+            )
+        return usuario_atual
+
+    return dependencia

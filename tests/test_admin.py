@@ -12,7 +12,7 @@ def criar_comentario(client, token, tmdb_movie_id=13, titulo="Forrest Gump", tex
 
 
 def test_usuario_comum_nao_acessa_rota_admin(client):
-    token = criar_token(role="usuario")
+    token = criar_token(role="nerd")
 
     resposta = client.get("/admin/comments", headers=auth_headers(token))
 
@@ -20,8 +20,8 @@ def test_usuario_comum_nao_acessa_rota_admin(client):
 
 
 def test_admin_lista_comentarios_de_todos_os_usuarios(client):
-    token_a = criar_token(role="usuario")
-    token_b = criar_token(role="usuario")
+    token_a = criar_token(role="nerd")
+    token_b = criar_token(role="nerd")
     token_admin = criar_token(role="admin")
 
     criar_comentario(client, token_a, titulo="Comentário de A")
@@ -35,8 +35,8 @@ def test_admin_lista_comentarios_de_todos_os_usuarios(client):
 
 
 def test_usuario_comum_nao_consegue_deletar_comentario_de_outro_via_rota_admin(client):
-    token_a = criar_token(role="usuario")
-    token_b = criar_token(role="usuario")
+    token_a = criar_token(role="nerd")
+    token_b = criar_token(role="nerd")
     comentario_a = criar_comentario(client, token_a)
 
     resposta = client.delete(f"/admin/comments/{comentario_a['id']}", headers=auth_headers(token_b))
@@ -45,7 +45,7 @@ def test_usuario_comum_nao_consegue_deletar_comentario_de_outro_via_rota_admin(c
 
 
 def test_admin_deleta_comentario_de_qualquer_usuario(client):
-    token_a = criar_token(role="usuario")
+    token_a = criar_token(role="nerd")
     token_admin = criar_token(role="admin")
     comentario_a = criar_comentario(client, token_a)
 

@@ -48,12 +48,15 @@ def client(db_session):
 
 
 def criar_token(
-    usuario_id: int | None = None, role: str = "usuario", nome: str = "Usuário Teste"
+    usuario_id: int | None = None, role: str = "nerd", nome: str = "Usuário Teste"
 ) -> str:
     """Gera um JWT do jeito que o auth-service geraria — o catálogo só
     verifica a assinatura localmente, não tem mais tabela de usuários pra
     consultar, então os testes de favoritos/comentários não precisam de um
     usuário "de verdade": só de um token válido com um usuario_id qualquer.
+
+    Papel padrão é "nerd" (não o mínimo "cinefilo") porque a maioria dos
+    testes existentes exercita comentário/favorito, que exigem nerd+.
     """
     if usuario_id is None:
         usuario_id = next(_proximo_usuario_id)
