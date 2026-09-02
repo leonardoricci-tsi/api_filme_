@@ -12,6 +12,8 @@ import { QuizResposta, QuizRodada } from '../../models/quiz.model';
   styleUrl: './quiz.css',
 })
 export class Quiz implements OnInit {
+  readonly LETRAS = ['a', 'b', 'c', 'd'];
+
   rodada = signal<QuizRodada | null>(null);
   carregando = signal(true);
   enviando = signal(false);
