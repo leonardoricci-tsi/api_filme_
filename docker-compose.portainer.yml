@@ -2,9 +2,12 @@ networks:
   catalog-net:
     driver: bridge
 
+volumes:
+  redis-data:
+
 services:
   api:
-    image: leonardoriccitsi/api-filmes:v2
+    image: leonardoriccitsi/api-filmes:v7
     ports:
       - "8215:8000"
     environment:
@@ -13,14 +16,16 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
       AUTH_SERVICE_URL: http://auth-service:8001
+      LOG_SERVICE_URL: http://log-service:8002
     networks:
       - catalog-net
     depends_on:
       - auth-service
+      - log-service
     restart: unless-stopped
 
   auth-service:
-    image: leonardoriccitsi/api-filmes-auth:v2
+    image: leonardoriccitsi/api-filmes-auth:v5
     environment:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
@@ -29,9 +34,43 @@ services:
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USER: ${SMTP_USER}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME}
       CATALOG_PUBLIC_URL: ${CATALOG_PUBLIC_URL}
+      LOG_SERVICE_URL: http://log-service:8002
     expose:
       - "8001"
     networks:
       - catalog-net
+    depends_on:
+      - log-service
+    restart: unless-stopped
+
+  # Serviço de auditoria (atividade 5): recebe evento de log de todo mundo
+  # (catálogo, auth-service) e grava num Redis Stream. Mesmo princípio dos
+  # outros dois: sem `ports:`, só alcançável de dentro da `catalog-net`.
+  log-service:
+    image: leonardoriccitsi/api-filmes-log:v1
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      REDIS_URL: redis://redis:6379/0
+    expose:
+      - "8002"
+    networks:
+      - catalog-net
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # Guarda só os eventos de auditoria (Redis Stream) — não é o banco de
+  # negócio (MySQL remoto, fora do compose). Sem `ports:`: só o
+  # log-service fala com ele, de dentro da rede.
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    networks:
+      - catalog-net
+    volumes:
+      - redis-data:/data
     restart: unless-stopped
