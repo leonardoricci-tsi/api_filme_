@@ -2,6 +2,9 @@ networks:
   catalog-net:
     driver: bridge
 
+volumes:
+  redis-data:
+
 services:
   api:
     build: .
@@ -11,10 +14,12 @@ services:
       - .env
     environment:
       AUTH_SERVICE_URL: http://auth-service:8001
+      LOG_SERVICE_URL: http://log-service:8002
     networks:
       - catalog-net
     depends_on:
       - auth-service
+      - log-service
 
   migrate:
     build: .
@@ -36,10 +41,14 @@ services:
     build: ./auth-service
     env_file:
       - .env
+    environment:
+      LOG_SERVICE_URL: http://log-service:8002
     expose:
       - "8001"
     networks:
       - catalog-net
+    depends_on:
+      - log-service
 
   migrate-auth:
     build: ./auth-service
@@ -51,3 +60,32 @@ services:
       - catalog-net
     profiles:
       - tools
+
+  # Serviço de auditoria (atividade 5): recebe evento de log de todo mundo
+  # (catálogo, auth-service) e grava num Redis Stream. Mesmo princípio do
+  # auth-service: sem `ports:`, só alcançável de dentro da rede
+  # `catalog-net`, pelo nome do serviço (http://log-service:8002).
+  log-service:
+    build: ./log-service
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    expose:
+      - "8002"
+    networks:
+      - catalog-net
+    depends_on:
+      - redis
+
+  # Guarda só os eventos de auditoria (Redis Stream) — não é o banco de
+  # negócio (MySQL remoto, fora do compose), por isso um container à parte.
+  # Sem `ports:`: só o log-service fala com ele, de dentro da rede.
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    networks:
+      - catalog-net
+    volumes:
+      - redis-data:/data
