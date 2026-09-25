@@ -24,6 +24,16 @@ class UsuarioOut(BaseModel):
     criado_em: datetime
 
 
+class UsuarioPublicoOut(BaseModel):
+    """Só o que pode aparecer num perfil público (atividade 6) — sem
+    e-mail nem papel."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nome: str
+
+
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"

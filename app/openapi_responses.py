@@ -33,6 +33,12 @@ def resp_403_papel(papel_minimo: str) -> dict:
 
 RESP_404 = {404: _erro("Recurso não existe, ou não pertence ao usuário logado", "Recurso não encontrado")}
 
+RESP_403_PERFIL_ALHEIO = {
+    403: _erro("Autenticado, mas tentando editar o perfil de outro usuário", "Você só pode editar o próprio perfil")
+}
+
+RESP_404_USUARIO = {404: _erro("usuario_id não existe no auth-service", "Usuário não encontrado")}
+
 RESP_409_FAVORITO = {409: _erro("Esse filme já está nos favoritos do usuário", "Filme já favoritado")}
 
 RESP_502_AUTH_SERVICE = {

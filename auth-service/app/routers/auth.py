@@ -6,7 +6,7 @@ from app.auth.security import create_access_token, hash_password, verify_passwor
 from app.database import get_db
 from app.models import Usuario
 from app.openapi_responses import RESP_401
-from app.schemas.auth import LoginIn, RegisterIn, TokenOut, UsuarioOut
+from app.schemas.auth import LoginIn, RegisterIn, TokenOut, UsuarioOut, UsuarioPublicoOut
 from app.services import log_client
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -71,3 +71,31 @@ def login(dados: LoginIn, request: Request, db: Session = Depends(get_db)) -> To
 @router.get("/me", response_model=UsuarioOut, responses=RESP_401)
 def me(usuario_atual: Usuario = Depends(get_current_user)) -> UsuarioOut:
     return usuario_atual
+
+
+_RESP_USUARIO_NAO_ENCONTRADO = {
+    404: {
+        "description": "usuario_id não existe",
+        "content": {"application/json": {"example": {"detail": "Usuário não encontrado"}}},
+    }
+}
+
+
+@router.get(
+    "/users/{usuario_id}",
+    response_model=UsuarioPublicoOut,
+    responses=RESP_401 | _RESP_USUARIO_NAO_ENCONTRADO,
+)
+def usuario_publico(
+    usuario_id: int,
+    _usuario_atual: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UsuarioPublicoOut:
+    """Nome de qualquer usuário, pra página de perfil (atividade 6) — o
+    catálogo é dono do perfil (bio, foto), mas o nome mora aqui, na tabela
+    `usuarios`. Exige estar logado, mas não ser o dono: ver perfil alheio é
+    permitido, editar é que não."""
+    usuario = db.get(Usuario, usuario_id)
+    if usuario is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado")
+    return usuario
