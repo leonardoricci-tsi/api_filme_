@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.auth.security import decode_access_token
+from app.services import log_client
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -49,9 +50,18 @@ def get_current_user(
 
 
 def require_admin(
+    request: Request,
     usuario_atual: UsuarioAutenticado = Depends(get_current_user),
 ) -> UsuarioAutenticado:
     if usuario_atual.role != "admin":
+        # Tentativa negada por permissão (atividade 5): especialmente
+        # valiosa pra auditoria de segurança, por isso loga aqui — cobre
+        # toda rota que usa essa dependência, não só uma por uma.
+        log_client.registrar_evento(
+            usuario_atual.id,
+            "acesso_negado:admin",
+            ip=request.client.host if request.client else None,
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso restrito a admins")
     return usuario_atual
 
@@ -71,10 +81,16 @@ def require_papel_minimo(papel_minimo: str):
     nivel_exigido = NIVEL_PAPEL[papel_minimo]
 
     def dependencia(
+        request: Request,
         usuario_atual: UsuarioAutenticado = Depends(get_current_user),
     ) -> UsuarioAutenticado:
         nivel_usuario = NIVEL_PAPEL.get(usuario_atual.role, 0)
         if nivel_usuario < nivel_exigido:
+            log_client.registrar_evento(
+                usuario_atual.id,
+                f"acesso_negado:{papel_minimo}",
+                ip=request.client.host if request.client else None,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Ação exige papel '{papel_minimo}' ou superior",

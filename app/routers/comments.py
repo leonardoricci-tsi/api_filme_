@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import UsuarioAutenticado, require_papel_minimo
@@ -6,6 +6,7 @@ from app.database import get_db
 from app.models import Comentario
 from app.routers._ownership import get_owned_or_404
 from app.schemas.comment import CommentIn, CommentOut
+from app.services import log_client
 
 router = APIRouter(prefix="/comments", tags=["comments"])
 
@@ -26,6 +27,7 @@ def _to_out(comentario: Comentario, usuario_atual_id: int) -> CommentOut:
 @router.post("", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
 def criar_comentario(
     dados: CommentIn,
+    request: Request,
     usuario_atual: UsuarioAutenticado = Depends(require_papel_minimo("nerd")),
     db: Session = Depends(get_db),
 ) -> CommentOut:
@@ -39,6 +41,12 @@ def criar_comentario(
     )
     db.add(comentario)
     db.commit()
+    # Evento mínimo exigido pela atividade 5.
+    log_client.registrar_evento(
+        usuario_atual.id,
+        f"comentar:{dados.tmdb_movie_id}",
+        ip=request.client.host if request.client else None,
+    )
     return _to_out(comentario, usuario_atual.id)
 
 

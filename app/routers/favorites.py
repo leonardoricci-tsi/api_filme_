@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models import Favorito
 from app.routers._ownership import get_owned_or_404
 from app.schemas.favorite import FavoriteIn, FavoriteOut
+from app.services import log_client
 
 router = APIRouter(prefix="/favorites", tags=["favorites"])
 
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/favorites", tags=["favorites"])
 @router.post("", response_model=FavoriteOut, status_code=status.HTTP_201_CREATED)
 def criar_favorito(
     dados: FavoriteIn,
+    request: Request,
     usuario_atual: UsuarioAutenticado = Depends(require_papel_minimo("nerd")),
     db: Session = Depends(get_db),
 ) -> FavoriteOut:
@@ -31,6 +33,12 @@ def criar_favorito(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Filme já favoritado"
         ) from erro
+    # Evento mínimo exigido pela atividade 5.
+    log_client.registrar_evento(
+        usuario_atual.id,
+        f"favoritar_filme:{dados.tmdb_movie_id}",
+        ip=request.client.host if request.client else None,
+    )
     return favorito
 
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
@@ -6,6 +6,7 @@ from app.auth.security import create_access_token, hash_password, verify_passwor
 from app.database import get_db
 from app.models import Usuario
 from app.schemas.auth import LoginIn, RegisterIn, TokenOut, UsuarioOut
+from app.services import log_client
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -30,7 +31,7 @@ def register(dados: RegisterIn, db: Session = Depends(get_db)) -> TokenOut:
 
 
 @router.post("/login", response_model=TokenOut)
-def login(dados: LoginIn, db: Session = Depends(get_db)) -> TokenOut:
+def login(dados: LoginIn, request: Request, db: Session = Depends(get_db)) -> TokenOut:
     credenciais_invalidas = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha inválidos"
     )
@@ -40,6 +41,11 @@ def login(dados: LoginIn, db: Session = Depends(get_db)) -> TokenOut:
         raise credenciais_invalidas
 
     token = create_access_token(usuario.id, usuario.role, usuario.nome)
+    # Evento mínimo exigido pela atividade 5 — login é decidido aqui (é
+    # quem tem a tabela `usuarios`), não no catálogo, que só repassa.
+    log_client.registrar_evento(
+        usuario.id, "login", ip=request.client.host if request.client else None
+    )
     return TokenOut(access_token=token)
 
 

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import UsuarioAutenticado, require_admin
@@ -7,6 +8,7 @@ from app.models import Comentario, Favorito
 from app.routers.comments import _to_out
 from app.schemas.comment import CommentOut
 from app.schemas.favorite import AdminFavoriteOut
+from app.services import log_client
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -25,6 +27,7 @@ def listar_todos_comentarios(
 @router.delete("/comments/{comentario_id}", status_code=status.HTTP_204_NO_CONTENT)
 def deletar_comentario_de_qualquer_usuario(
     comentario_id: int,
+    request: Request,
     usuario_atual: UsuarioAutenticado = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> None:
@@ -36,6 +39,13 @@ def deletar_comentario_de_qualquer_usuario(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recurso não encontrado")
     db.delete(comentario)
     db.commit()
+    # "apagar comentário (moderação)": evento mínimo exigido pela
+    # atividade 5 — usuario_id aqui é de quem moderou, não do autor.
+    log_client.registrar_evento(
+        usuario_atual.id,
+        f"apagar_comentario_moderacao:{comentario_id}",
+        ip=request.client.host if request.client else None,
+    )
 
 
 @router.get("/favorites", response_model=list[AdminFavoriteOut])
@@ -62,3 +72,24 @@ def deletar_favorito_de_qualquer_usuario(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recurso não encontrado")
     db.delete(favorito)
     db.commit()
+
+
+@router.get("/logs")
+def consultar_logs(
+    limit: int = Query(50, ge=1, le=1000),
+    authorization: str | None = Header(None),
+    _usuario_atual: UsuarioAutenticado = Depends(require_admin),
+) -> JSONResponse:
+    """Só admin: consulta os últimos N eventos de auditoria (atividade 5).
+
+    Log-service não tem porta publicada pro host (mesmo princípio do
+    auth-service), então essa rota é a única forma de um admin consultar o
+    log de fora — o catálogo já barra com 403 quem não for admin
+    (`require_admin`, mesmo enforcement da atividade 4) e repassa o header
+    Authorization original pro log-service, que confere de novo com o
+    mesmo JWT: defesa em profundidade, não round-trip redundante à toa."""
+    try:
+        resposta = log_client.consultar_eventos(limit, authorization)
+    except log_client.LogServiceUnavailable as erro:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(erro)) from erro
+    return JSONResponse(status_code=resposta.status_code, content=resposta.json())

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.auth.dependencies import bearer_scheme
+from app.auth.dependencies import UsuarioAutenticado, bearer_scheme, get_current_user
 from app.schemas.auth import LoginIn, RegisterIn
 from app.schemas.password_reset import ForgotPasswordIn, ResetPasswordIn
+from app.services import log_client
 from app.services.auth_client import AuthServiceUnavailable, forward
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -30,6 +31,21 @@ def login(dados: LoginIn) -> JSONResponse:
     except AuthServiceUnavailable as erro:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(erro)) from erro
     return _proxy(resposta)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    request: Request,
+    usuario_atual: UsuarioAutenticado = Depends(get_current_user),
+) -> None:
+    """JWT é stateless — não existe sessão pra invalidar no servidor (quem
+    descarta o token é o front). Essa rota não faz mais nada além de
+    registrar o evento de auditoria: "logout" é um dos eventos mínimos
+    exigidos pela atividade 5, e sem uma rota pra chamar antes de descartar
+    o token, esse evento nunca aconteceria."""
+    log_client.registrar_evento(
+        usuario_atual.id, "logout", ip=request.client.host if request.client else None
+    )
 
 
 @router.get("/me")

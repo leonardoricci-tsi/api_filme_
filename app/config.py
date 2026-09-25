@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # Nome do serviço no docker-compose (rede interna) — o catálogo nunca
     # fala com o auth-service pelo host nem por IP, só por esse DNS interno.
     auth_service_url: str = "http://auth-service:8001"
+    # Idem para o log-service (atividade 5) — auditoria de favoritar,
+    # comentar, apagar comentário e tentativa negada (403).
+    log_service_url: str = "http://log-service:8002"
 
 
 @lru_cache
