@@ -1,0 +1,19 @@
+# Configuração do Garage (atividade 6) — sem nenhum segredo aqui dentro:
+# o rpc_secret vem da variável GARAGE_RPC_SECRET e a chave de acesso S3 das
+# GARAGE_DEFAULT_* (ver docker-compose.yml e .env.example), por isso este
+# arquivo pode ir pro git.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+
+# Um nó só, sem replicação — é um projeto de disciplina, não um cluster.
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+# Tem que bater com S3_REGION do catálogo (app/config.py, padrão "garage"):
+# a região entra na assinatura SigV4 das URLs pré-assinadas.
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
