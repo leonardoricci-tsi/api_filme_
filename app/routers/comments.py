@@ -4,11 +4,14 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import UsuarioAutenticado, require_papel_minimo
 from app.database import get_db
 from app.models import Comentario
+from app.openapi_responses import RESP_401, RESP_404, resp_403_papel
 from app.routers._ownership import get_owned_or_404
 from app.schemas.comment import CommentIn, CommentOut
 from app.services import log_client
 
 router = APIRouter(prefix="/comments", tags=["comments"])
+
+_RESP_NERD = RESP_401 | resp_403_papel("nerd")
 
 
 def _to_out(comentario: Comentario, usuario_atual_id: int) -> CommentOut:
@@ -24,7 +27,9 @@ def _to_out(comentario: Comentario, usuario_atual_id: int) -> CommentOut:
     )
 
 
-@router.post("", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=CommentOut, status_code=status.HTTP_201_CREATED, responses=_RESP_NERD
+)
 def criar_comentario(
     dados: CommentIn,
     request: Request,
@@ -50,7 +55,7 @@ def criar_comentario(
     return _to_out(comentario, usuario_atual.id)
 
 
-@router.get("", response_model=list[CommentOut])
+@router.get("", response_model=list[CommentOut], responses=_RESP_NERD)
 def listar_comentarios(
     tmdb_movie_id: int | None = Query(None),
     usuario_atual: UsuarioAutenticado = Depends(require_papel_minimo("nerd")),
@@ -70,7 +75,11 @@ def listar_comentarios(
     return [_to_out(c, usuario_atual.id) for c in comentarios]
 
 
-@router.delete("/{comentario_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{comentario_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=_RESP_NERD | RESP_404,
+)
 def deletar_comentario(
     comentario_id: int,
     usuario_atual: UsuarioAutenticado = Depends(require_papel_minimo("nerd")),

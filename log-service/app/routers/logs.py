@@ -34,7 +34,19 @@ def registrar_evento(
     return {"id": entry_id}
 
 
-@router.get("/logs", response_model=list[LogEventOut])
+_RESP_ADMIN = {
+    401: {
+        "description": "Token ausente, inválido ou expirado",
+        "content": {"application/json": {"example": {"detail": "Credenciais inválidas ou expiradas"}}},
+    },
+    403: {
+        "description": "Autenticado, mas sem papel admin",
+        "content": {"application/json": {"example": {"detail": "Acesso restrito a admins"}}},
+    },
+}
+
+
+@router.get("/logs", response_model=list[LogEventOut], responses=_RESP_ADMIN)
 def consultar_eventos(
     limit: int = Query(50, ge=1, le=1000),
     redis_client: Redis = Depends(get_redis),

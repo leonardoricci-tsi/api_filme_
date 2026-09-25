@@ -5,14 +5,22 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import UsuarioAutenticado, require_papel_minimo
 from app.database import get_db
 from app.models import Favorito
+from app.openapi_responses import RESP_401, RESP_404, RESP_409_FAVORITO, resp_403_papel
 from app.routers._ownership import get_owned_or_404
 from app.schemas.favorite import FavoriteIn, FavoriteOut
 from app.services import log_client
 
 router = APIRouter(prefix="/favorites", tags=["favorites"])
 
+_RESP_NERD = RESP_401 | resp_403_papel("nerd")
 
-@router.post("", response_model=FavoriteOut, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "",
+    response_model=FavoriteOut,
+    status_code=status.HTTP_201_CREATED,
+    responses=_RESP_NERD | RESP_409_FAVORITO,
+)
 def criar_favorito(
     dados: FavoriteIn,
     request: Request,
@@ -42,7 +50,7 @@ def criar_favorito(
     return favorito
 
 
-@router.get("", response_model=list[FavoriteOut])
+@router.get("", response_model=list[FavoriteOut], responses=_RESP_NERD)
 def listar_favoritos(
     usuario_atual: UsuarioAutenticado = Depends(require_papel_minimo("nerd")),
     db: Session = Depends(get_db),
@@ -55,7 +63,11 @@ def listar_favoritos(
     )
 
 
-@router.delete("/{favorito_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{favorito_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=_RESP_NERD | RESP_404,
+)
 def deletar_favorito(
     favorito_id: int,
     usuario_atual: UsuarioAutenticado = Depends(require_papel_minimo("nerd")),

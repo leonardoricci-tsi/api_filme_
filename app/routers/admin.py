@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import UsuarioAutenticado, require_admin
 from app.database import get_db
 from app.models import Comentario, Favorito
+from app.openapi_responses import RESP_401, RESP_403_ADMIN, RESP_404, RESP_502_LOG_SERVICE
 from app.routers.comments import _to_out
 from app.schemas.comment import CommentOut
 from app.schemas.favorite import AdminFavoriteOut
@@ -12,8 +13,10 @@ from app.services import log_client
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+_RESP_ADMIN = RESP_401 | RESP_403_ADMIN
 
-@router.get("/comments", response_model=list[CommentOut])
+
+@router.get("/comments", response_model=list[CommentOut], responses=_RESP_ADMIN)
 def listar_todos_comentarios(
     usuario_atual: UsuarioAutenticado = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -24,7 +27,11 @@ def listar_todos_comentarios(
     return [_to_out(c, usuario_atual.id) for c in comentarios]
 
 
-@router.delete("/comments/{comentario_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/comments/{comentario_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=_RESP_ADMIN | RESP_404,
+)
 def deletar_comentario_de_qualquer_usuario(
     comentario_id: int,
     request: Request,
@@ -48,7 +55,7 @@ def deletar_comentario_de_qualquer_usuario(
     )
 
 
-@router.get("/favorites", response_model=list[AdminFavoriteOut])
+@router.get("/favorites", response_model=list[AdminFavoriteOut], responses=_RESP_ADMIN)
 def listar_todos_favoritos(
     _usuario_atual: UsuarioAutenticado = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -58,7 +65,11 @@ def listar_todos_favoritos(
     return db.query(Favorito).order_by(Favorito.criado_em.desc()).all()
 
 
-@router.delete("/favorites/{favorito_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/favorites/{favorito_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=_RESP_ADMIN | RESP_404,
+)
 def deletar_favorito_de_qualquer_usuario(
     favorito_id: int,
     _usuario_atual: UsuarioAutenticado = Depends(require_admin),
@@ -74,7 +85,7 @@ def deletar_favorito_de_qualquer_usuario(
     db.commit()
 
 
-@router.get("/logs")
+@router.get("/logs", responses=_RESP_ADMIN | RESP_502_LOG_SERVICE)
 def consultar_logs(
     limit: int = Query(50, ge=1, le=1000),
     authorization: str | None = Header(None),

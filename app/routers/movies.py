@@ -2,6 +2,7 @@ import math
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from app.openapi_responses import RESP_502_TMDB
 from app.schemas.movie import DetalhesFilmeOut, PaginaFilmes
 from app.services.tmdb import TMDBError, get_movie_detalhes, get_tom_hanks_movies
 
@@ -10,7 +11,7 @@ router = APIRouter(tags=["movies"])
 TAMANHO_PAGINA = 20
 
 
-@router.get("/movies", response_model=PaginaFilmes)
+@router.get("/movies", response_model=PaginaFilmes, responses=RESP_502_TMDB)
 def listar_filmes(pagina: int = Query(1, ge=1), busca: str = Query("")) -> PaginaFilmes:
     try:
         filmes = get_tom_hanks_movies()
@@ -36,7 +37,7 @@ def listar_filmes(pagina: int = Query(1, ge=1), busca: str = Query("")) -> Pagin
     )
 
 
-@router.get("/movies/{tmdb_movie_id}/detalhes", response_model=DetalhesFilmeOut)
+@router.get("/movies/{tmdb_movie_id}/detalhes", response_model=DetalhesFilmeOut, responses=RESP_502_TMDB)
 def detalhes_filme(tmdb_movie_id: int) -> DetalhesFilmeOut:
     try:
         detalhes = get_movie_detalhes(tmdb_movie_id)

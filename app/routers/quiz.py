@@ -10,10 +10,13 @@ from PIL import Image
 
 from app.auth.dependencies import UsuarioAutenticado, require_papel_minimo
 from app.config import get_settings
+from app.openapi_responses import RESP_401, RESP_502_TMDB, resp_403_papel
 from app.schemas.quiz import QuizPixeladoOut, QuizRespostaIn, QuizRespostaOut
 from app.services.tmdb import TMDBError, get_tom_hanks_movies
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])
+
+_RESP_STALKER = RESP_401 | resp_403_papel("stalker_do_tomhanks")
 
 # Quão pequeno o pôster fica antes de ser ampliado de volta — quanto menor,
 # mais "blocos" grandes e mais difícil de reconhecer o filme de cara.
@@ -52,7 +55,7 @@ def _abrir_round(round_id: str) -> int:
     return payload["tmdb_movie_id"]
 
 
-@router.get("/pixelado", response_model=QuizPixeladoOut)
+@router.get("/pixelado", response_model=QuizPixeladoOut, responses=_RESP_STALKER | RESP_502_TMDB)
 def novo_quiz_pixelado(
     _usuario_atual: UsuarioAutenticado = Depends(require_papel_minimo("stalker_do_tomhanks")),
 ) -> QuizPixeladoOut:
@@ -91,7 +94,23 @@ def novo_quiz_pixelado(
     )
 
 
-@router.post("/pixelado/resposta", response_model=QuizRespostaOut)
+@router.post(
+    "/pixelado/resposta",
+    response_model=QuizRespostaOut,
+    responses=_RESP_STALKER
+    | RESP_502_TMDB
+    | {
+        400: {
+            "description": "round_id expirado, adulterado, ou assinado com outro JWT_SECRET",
+            "content": {"application/json": {"example": {"detail": "Rodada inválida ou expirada"}}},
+        },
+        404: {
+            "description": "O filme sorteado nessa rodada sumiu do catálogo da TMDB entre o "
+            "GET /pixelado e essa resposta (raro, mas possível)",
+            "content": {"application/json": {"example": {"detail": "Filme da rodada não encontrado"}}},
+        },
+    },
+)
 def responder_quiz_pixelado(
     dados: QuizRespostaIn,
     _usuario_atual: UsuarioAutenticado = Depends(require_papel_minimo("stalker_do_tomhanks")),

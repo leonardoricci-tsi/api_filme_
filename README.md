@@ -266,6 +266,42 @@ Só respondem pra chamadas vindas do catálogo ou do `auth-service`, dentro da r
 | POST | `/logs` | não (interno) | Grava um evento no Redis Stream — sem autenticação própria porque só é alcançável de dentro da rede, chamado depois que o catálogo/auth-service já identificaram o usuário |
 | GET | `/logs?limit=` | sim (admin) | Últimos N eventos, mais recente primeiro — é essa rota que o catálogo repassa em `GET /admin/logs` |
 
+## Documentação da API (Swagger/OpenAPI)
+
+Os três serviços são FastAPI, então o Swagger UI e a spec OpenAPI já existem de graça — nenhuma biblioteca extra, nenhuma anotação manual pra descrever rota/parâmetro/formato de resposta: o FastAPI gera tudo isso a partir dos `response_model` e schemas Pydantic que o código já tinha antes desta atividade.
+
+**O que essa atividade acrescentou de verdade:** documentar os *erros*. Por padrão o FastAPI só descreve o caminho de sucesso (e o `422` automático de validação) — todo `HTTPException` que uma rota levanta (`401`, `403`, `404`, `409`, `502`...) aparecia como *"Undocumented"* no Swagger até alguém clicar em "Try it out" e ver na marra. Cada rota autenticada ou que pode falhar agora declara `responses=` com descrição + exemplo de payload pro erro real que ela levanta — nada inventado, os textos batem com o `detail` que o código manda (`app/openapi_responses.py` no catálogo, equivalente em `auth-service/` e `log-service/`, reaproveitados entre rotas com o mesmo tipo de erro pra não duplicar o mesmo dicionário 20 vezes).
+
+**Onde ver:**
+| Serviço | Swagger UI | Spec OpenAPI |
+|---|---|---|
+| Catálogo | público — https://leonardo-oliveira-isw055.lapps.studio/docs (ou `http://localhost:8000/docs` local) | `GET /openapi.json` no mesmo host |
+| `auth-service` | sem porta publicada, não dá pra acessar de fora | exportada em [`docs/openapi/auth-service.json`](docs/openapi/auth-service.json) — cole em [editor.swagger.io](https://editor.swagger.io) pra visualizar, ou rode local (passo 6 de "Como rodar localmente") e acesse `http://localhost:8001/docs` |
+| `log-service` | sem porta publicada, não dá pra acessar de fora | exportada em [`docs/openapi/log-service.json`](docs/openapi/log-service.json) — mesma ideia, ou local em `http://localhost:8002/docs` |
+
+`auth-service` e `log-service` ficarem sem Swagger público não é uma limitação desta atividade — é a mesma decisão de arquitetura de sempre (nenhum dos dois tem porta publicada pro host, [ver Arquitetura](#arquitetura)); a spec exportada é a alternativa que o próprio enunciado prevê pra esse caso ("o arquivo openapi.yaml/.json no repositório também vale"). Pra regenerar depois de mexer numa rota:
+```bash
+# catálogo
+.venv/bin/python -c "import json; from app.main import app; json.dump(app.openapi(), open('docs/openapi/catalogo.json', 'w'), ensure_ascii=False, indent=2)"
+
+# auth-service (precisa das env vars mínimas pro Settings não reclamar)
+cd auth-service && ../.venv/bin/python -c "
+import os, json
+os.environ.setdefault('DATABASE_URL', 'sqlite:///:memory:'); os.environ.setdefault('JWT_SECRET', 'x')
+os.environ.setdefault('SMTP_USER', 'x'); os.environ.setdefault('SMTP_PASSWORD', 'x')
+from app.main import app
+json.dump(app.openapi(), open('../docs/openapi/auth-service.json', 'w'), ensure_ascii=False, indent=2)
+"
+
+# log-service
+cd log-service && .venv/bin/python -c "
+import os, json
+os.environ.setdefault('JWT_SECRET', 'x')
+from app.main import app
+json.dump(app.openapi(), open('../docs/openapi/log-service.json', 'w'), ensure_ascii=False, indent=2)
+"
+```
+
 ## Estrutura do projeto
 ```
 app/                    # catálogo
@@ -275,6 +311,7 @@ app/                    # catálogo
   routers/      # rotas da API: quiz.py (pixelado, stalker+), admin.py (moderação de comentários e favoritos),
                 #   auth.py (proxy de /auth/* e /auth/admin/* pro auth-service), comments/favorites (nerd+)
   services/     # cliente HTTP do auth-service (auth_client.py), do log-service (log_client.py) + cliente da TMDB
+  openapi_responses.py  # blocos de erro (401/403/404/409/502) reaproveitados no responses= de cada rota
   static/       # build de produção do Angular (gerado por `npm run build`, não editar à mão)
 alembic/        # migrations do catálogo
 tests/          # pytest (SQLite em memória + mocks da TMDB, do auth-service e do log-service via respx),
@@ -286,6 +323,7 @@ auth-service/           # microsserviço de autenticação
     routers/    # /auth/* (register, login, me), /auth/forgot-password, /auth/reset-password,
                 #   /auth/admin/users e /auth/admin/users/{id}/role (admin.py, atividade 4)
     services/   # mailer.py (e-mail de redefinição via SMTP), log_client.py (evento de login/403 pro log-service)
+    openapi_responses.py  # mesma ideia do catálogo, blocos de erro pro Swagger
   alembic/      # migrations do auth-service (histórico próprio, alembic_version_auth)
 log-service/            # microsserviço de auditoria (atividade 5) — SEM alembic/SQL, só Redis
   app/
@@ -301,6 +339,8 @@ frontend/       # projeto Angular (standalone components)
     shared/     # movie-card (usado no catálogo e nos favoritos, com diálogo de comentários)
     features/   # telas: auth/login, auth/register, auth/forgot-password, auth/reset-password, catalog, favorites, comments
 docker-compose.yml      # os quatro serviços (api, auth-service, log-service, redis) + rede catalog-net
+docs/openapi/           # spec OpenAPI exportada de auth-service e log-service (sem porta publicada,
+                        #   Swagger UI deles só dá pra ver local — ver "Documentação da API")
 ```
 
 ## Notas de segurança / design
@@ -315,6 +355,20 @@ docker-compose.yml      # os quatro serviços (api, auth-service, log-service, r
 - `log-service` não tem tabela de usuários própria — decodifica o mesmo JWT localmente (mesmo `JWT_SECRET`) pra saber quem é admin, igual o catálogo faz pro resto do RBAC.
 
 ## Evidências
+
+### Atividade extra — Documentação Swagger/OpenAPI: erro documentado + "Try it out" executado
+
+`GET /admin/comments` chamado por um usuário `nerd` (não-admin), direto no Swagger UI público (https://leonardo-oliveira-isw055.lapps.studio/docs) — antes desta atividade o `403` que essa rota levanta aparecia como *"Undocumented"* no Swagger; agora está descrito, com exemplo de payload, ao lado do `401` e do `200`.
+
+**1. Endpoint expandido, mostrando os erros documentados na tabela "Responses" (ainda sem executar):**
+
+![Tabela de Responses do Swagger mostrando 200, 401 e 403 documentados, cada um com descrição e exemplo](docs/evidencias/swagger-erros-documentados.png)
+
+**2. O mesmo endpoint depois de "Try it out" → "Execute" — chamada real, resposta real, batendo com o que estava documentado:**
+
+![Try it out executado: curl real, request URL real, resposta 403 real do servidor](docs/evidencias/swagger-try-it-out.png)
+
+Spec completa de cada serviço: catálogo em [`/docs`](https://leonardo-oliveira-isw055.lapps.studio/docs) (público); `auth-service` e `log-service` exportados em [`docs/openapi/`](docs/openapi/) (sem porta publicada, não dá pra servir Swagger pra fora — ver [Documentação da API](#documentação-da-api-swaggeropenapi)).
 
 ### Atividade 5 — Auditoria: login, favoritar, comentar, ação negada e consulta como admin
 

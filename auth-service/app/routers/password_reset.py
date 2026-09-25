@@ -13,6 +13,15 @@ router = APIRouter(prefix="/auth", tags=["password-reset"])
 
 MENSAGEM_GENERICA = "Se esse email estiver cadastrado, você vai receber um link de redefinição."
 
+_RESP_LINK_INVALIDO = {
+    400: {
+        "description": "Token inexistente, expirado ou já usado",
+        "content": {
+            "application/json": {"example": {"detail": "Link inválido, expirado ou já utilizado"}}
+        },
+    }
+}
+
 
 @router.post("/forgot-password")
 def forgot_password(dados: ForgotPasswordIn, db: Session = Depends(get_db)) -> dict:
@@ -27,7 +36,7 @@ def forgot_password(dados: ForgotPasswordIn, db: Session = Depends(get_db)) -> d
     return {"detail": MENSAGEM_GENERICA}
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", responses=_RESP_LINK_INVALIDO)
 def reset_password(dados: ResetPasswordIn, db: Session = Depends(get_db)) -> dict:
     reset_token = validar_reset_token(db, dados.token)
     if reset_token is None:

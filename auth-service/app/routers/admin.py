@@ -5,12 +5,31 @@ from app.auth.dependencies import require_admin
 from app.database import get_db
 from app.models import Usuario
 from app.models.usuario import PAPEIS_VALIDOS
+from app.openapi_responses import RESP_401, RESP_403_ADMIN
 from app.schemas.auth import RoleUpdateIn, UsuarioOut
 
 router = APIRouter(prefix="/auth/admin", tags=["admin"])
 
+_RESP_ADMIN = RESP_401 | RESP_403_ADMIN
+_RESP_PAPEL_INVALIDO_OU_USUARIO_NAO_ENCONTRADO = {
+    400: {
+        "description": "`role` enviado não é um dos papéis válidos",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Papel inválido. Use um de: cinefilo, nerd, stalker_do_tomhanks, admin"
+                }
+            }
+        },
+    },
+    404: {
+        "description": "usuario_id não existe",
+        "content": {"application/json": {"example": {"detail": "Usuário não encontrado"}}},
+    },
+}
 
-@router.get("/users", response_model=list[UsuarioOut])
+
+@router.get("/users", response_model=list[UsuarioOut], responses=_RESP_ADMIN)
 def listar_usuarios(
     _admin: Usuario = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -21,7 +40,11 @@ def listar_usuarios(
     return db.query(Usuario).order_by(Usuario.id).all()
 
 
-@router.patch("/users/{usuario_id}/role", response_model=UsuarioOut)
+@router.patch(
+    "/users/{usuario_id}/role",
+    response_model=UsuarioOut,
+    responses=_RESP_ADMIN | _RESP_PAPEL_INVALIDO_OU_USUARIO_NAO_ENCONTRADO,
+)
 def alterar_papel_usuario(
     usuario_id: int,
     dados: RoleUpdateIn,
