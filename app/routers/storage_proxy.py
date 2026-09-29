@@ -30,7 +30,8 @@ def repassar_para_o_garage(chave: str, request: Request) -> Response:
     Quem valida a assinatura e a expiração continua sendo o Garage: o
     caminho e a query vão intactos, e o `Host` enviado é o mesmo que entrou
     na assinatura (o de `s3_public_url`). Sem assinatura válida, o Garage
-    responde 403 e esse 403 volta pro navegador — o bucket segue privado.
+    responde 403 (e 400 "Date is too old" se a URL já expirou), e essa
+    recusa volta pro navegador como veio — o bucket segue privado.
 
     Não é um endpoint da API (fica fora do Swagger): é só um túnel pro
     object storage."""

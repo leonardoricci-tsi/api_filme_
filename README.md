@@ -149,12 +149,12 @@ Em `app/services/imagem.py`, antes de aceitar:
 | Cache do navegador | Ótimo (URL estável) | Pior (a URL muda a cada carregamento) |
 | No Garage | Nem existe do jeito simples: o Garage **não tem bucket policy/ACL**. Leitura pública só pelo endpoint de *website*, que é outro servidor, outra porta, roteado por nome de host | Suportado direto na API S3 (assinatura SigV4) |
 
-O preço é o cache (a foto é baixada de novo a cada visita ao perfil) e um pouco mais de lógica no backend. Em troca, o bucket nunca fica aberto: sem assinatura válida e dentro do prazo, o Garage responde `403`. No Garage, a opção "pública" ainda exigiria configurar um endpoint de website à parte, então a pré-assinada ficou mais simples **e** mais segura.
+O preço é o cache (a foto é baixada de novo a cada visita ao perfil) e um pouco mais de lógica no backend. Em troca, o bucket nunca fica aberto: sem assinatura, ou com a assinatura adulterada, o Garage responde `403`; com a URL expirada, responde `400` (`Date is too old`). No Garage, a opção "pública" ainda exigiria configurar um endpoint de website à parte, então a pré-assinada ficou mais simples **e** mais segura.
 
 **Detalhe de deploy: uma porta só.** O servidor da disciplina expõe só um domínio HTTPS, o do catálogo. E a página HTTPS não pode carregar imagem de um endereço HTTP (o navegador bloqueia), então o Garage não tem como ter porta pública própria. A solução mantém a URL pré-assinada de verdade:
 1. O catálogo assina a URL com o **domínio do próprio catálogo** (`S3_PUBLIC_URL`), por exemplo `https://.../api-filmes-perfis/perfis/7/ab12.jpg?X-Amz-Signature=...`.
 2. O navegador pede esse caminho ao catálogo, que repassa pro Garage pela rede interna **sem tocar em nada que entrou na assinatura**: mesmo caminho, mesma query byte a byte, e o mesmo `Host` que foi assinado (`app/routers/storage_proxy.py`).
-3. **Quem valida a assinatura e a expiração continua sendo o Garage**; o catálogo não decide nada, só devolve a resposta (`200` com a imagem, ou `403`).
+3. **Quem valida a assinatura e a expiração continua sendo o Garage**; o catálogo não decide nada, só devolve a resposta (`200` com a imagem, `403` sem assinatura válida, `400` se já expirou).
 
 Assim o Garage fica igual ao `auth-service`, ao `log-service` e ao `redis`: sem porta publicada.
 
