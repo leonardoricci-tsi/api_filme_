@@ -96,19 +96,20 @@ services:
 
   # Object storage (atividade 6): guarda o arquivo da foto de perfil — o
   # MySQL guarda só a chave do objeto. Garage no lugar do MinIO.
+  # Mesmo princípio dos outros serviços internos: sem `ports:`. O navegador
+  # abre a foto por URL pré-assinada no domínio do catálogo, que repassa pro
+  # Garage pela rede interna (app/routers/storage_proxy.py).
   garage:
-    image: dxflrs/garage:v2.3.0
-    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    build: ./garage
     environment:
       GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
       GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY}
       GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_KEY}
       GARAGE_DEFAULT_BUCKET: ${S3_BUCKET:-api-filmes-perfis}
-    ports:
-      - "3900:3900"
+    expose:
+      - "3900"
     networks:
       - catalog-net
     volumes:
-      - ./garage.toml:/etc/garage.toml:ro
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data

@@ -143,6 +143,74 @@
         ]
       }
     },
+    "/auth/users/{usuario_id}": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Usuario Publico",
+        "description": "Nome de qualquer usuário, pra página de perfil (atividade 6) — o\ncatálogo é dono do perfil (bio, foto), mas o nome mora aqui, na tabela\n`usuarios`. Exige estar logado, mas não ser o dono: ver perfil alheio é\npermitido, editar é que não.",
+        "operationId": "usuario_publico_auth_users__usuario_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "usuario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Usuario Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioPublicoOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido ou expirado",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Credenciais inválidas ou expiradas"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "usuario_id não existe",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Usuário não encontrado"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/forgot-password": {
       "post": {
         "tags": [
@@ -549,6 +617,25 @@
           "criado_em"
         ],
         "title": "UsuarioOut"
+      },
+      "UsuarioPublicoOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nome"
+        ],
+        "title": "UsuarioPublicoOut",
+        "description": "Só o que pode aparecer num perfil público (atividade 6) — sem\ne-mail nem papel."
       },
       "ValidationError": {
         "properties": {

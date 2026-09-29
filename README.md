@@ -6,16 +6,19 @@ API FastAPI que lista filmes do Tom Hanks (dados sempre ao vivo da TMDB, nunca p
 
 **Atividade 3 — serviços desacoplados:** a autenticação (login, cadastro, papéis de usuário e recuperação de senha) foi extraída do catálogo para um microsserviço próprio, o `auth-service/`, que só é alcançável pela rede interna do Docker. O catálogo continua sendo o único ponto de entrada público. Veja a seção [Arquitetura](#arquitetura) e as [evidências](#evidências) mais abaixo.
 
+**Atividade 6 — armazenamento de objetos:** o catálogo virou uma rede social simples: cada usuário tem uma página de perfil com foto, bio e os filmes favoritados. A foto **não vai pro banco** — vai pra um object storage (Garage, compatível com S3), e o MySQL guarda só a chave do objeto. Veja a seção [Perfil e fotos](#perfil-e-fotos-object-storage-atividade-6).
+
 ## Stack
 - **Backend:** FastAPI + SQLAlchemy + Alembic (catálogo e `auth-service`, cada um com sua própria migration history)
 - **Banco:** MySQL (driver `pymysql`) — a mesma instância remota, compartilhada entre os dois serviços
 - **Auth:** microsserviço próprio (`auth-service/`), cadastro/login com senha em hash `bcrypt`, sessão via JWT (assinatura verificada localmente pelo catálogo), papéis `usuario`/`admin`, recuperação de senha por e-mail com token de expiração de 30 minutos
+- **Object storage:** [Garage](https://garagehq.deuxfleurs.fr) (API S3, cliente `boto3`) — fotos de perfil; o banco guarda só a chave do objeto
 - **E-mail:** SMTP — Mailtrap em desenvolvimento (sandbox, não entrega de verdade), Brevo em produção
 - **Frontend:** Angular (standalone components), build servido como estático pelo próprio FastAPI em produção
 
 ## Arquitetura
 
-Quatro containers, uma rede interna, um único ponto de entrada público:
+Cinco containers, uma rede interna, um único ponto de entrada público:
 
 ```
 Navegador ──HTTPS──▶ Catálogo (api)                MySQL
@@ -30,6 +33,9 @@ Navegador ──HTTPS──▶ Catálogo (api)                MySQL
                           │     GET /logs = só admin
                           │         ▲
                           │         │ POST /logs (login, 403 negado)
+                          │ PUT/DELETE objeto (foto de perfil) + repasse
+                          │ da URL pré-assinada ──────────▶ Garage (API S3)
+                          │                                 SEM porta publicada
                           │ rede interna do Docker (catalog-net)
                           ▼         │
                       auth-service ─┘
@@ -38,7 +44,7 @@ Navegador ──HTTPS──▶ Catálogo (api)                MySQL
                       SEM porta publicada ──SMTP──▶ Mailtrap (dev) / Brevo (prod) ──▶ e-mail do usuário
 ```
 
-- O `auth-service` não tem `ports:` no `docker-compose.yml` — só `expose: "8001"`, acessível apenas de dentro da rede `catalog-net`, pelo nome do serviço (`http://auth-service:8001`). O `log-service` (atividade 5) e o `redis` seguem o mesmo princípio: `expose: "8002"` e `expose: "6379"`, nenhum dos dois alcançável de fora.
+- O `auth-service` não tem `ports:` no `docker-compose.yml` — só `expose: "8001"`, acessível apenas de dentro da rede `catalog-net`, pelo nome do serviço (`http://auth-service:8001`). O `log-service` (atividade 5), o `redis` e o `garage` (atividade 6) seguem o mesmo princípio: `expose: "8002"`, `expose: "6379"` e `expose: "3900"`, nenhum alcançável de fora.
 - O catálogo é o único container com porta publicada pro host. Toda rota `/auth/*` (registro, login, perfil, esqueci-senha, redefinir senha) é recebida pelo catálogo e repassada internamente pro `auth-service` (`app/services/auth_client.py`).
 - Fora de `/auth/*`, o catálogo **não** chama o `auth-service` a cada request: o JWT é assinado pelo `auth-service` mas verificado localmente pelo catálogo (mesmo `JWT_SECRET` nos dois), o que evita um round-trip de rede em toda chamada autenticada.
 - Catálogo e `auth-service` são os únicos que decidem o que auditar — nenhum dos dois escreve log de auditoria no próprio banco (MySQL); os dois mandam um evento HTTP (`POST /logs`) pro `log-service`, que é quem sabe gravar num Redis Stream. Detalhes na seção [Auditoria (logs)](#auditoria-logs-atividade-5).
@@ -99,11 +105,69 @@ Catálogo e `auth-service` nunca escrevem direto no Redis — mantém a centrali
 | Comentar | `comentar:{tmdb_movie_id}` | Catálogo, `POST /comments` |
 | Apagar comentário (moderação) | `apagar_comentario_moderacao:{comentario_id}` | Catálogo, `DELETE /admin/comments/{id}` |
 | Tentativa negada por permissão (403) | `acesso_negado:{papel}` (ex.: `acesso_negado:admin`, `acesso_negado:nerd`) | Dentro de `require_admin`/`require_papel_minimo`, nos dois serviços — cobre **toda** rota protegida de uma vez, sem precisar logar em cada endpoint separadamente |
+| Editar bio (atividade 6) | `atualizar_perfil` | Catálogo, `PATCH /profiles/{id}` |
+| Enviar foto de perfil (atividade 6) | `upload_foto_perfil` | Catálogo, `POST /profiles/{id}/foto` |
+| Tentar editar o perfil de outro (atividade 6) | `acesso_negado:perfil:{id}` | Dentro de `require_dono_do_perfil`, no catálogo |
 
 Estrutura mínima de cada evento: `usuario_id`, `acao`, `timestamp` (gerado pelo `log-service`, não pelo chamador) e, como bônus, `ip` (`request.client.host` de quem chamou).
 
 ### Consultar o log — só admin
 `GET /logs` no `log-service` exige `role == "admin"` (decodifica o mesmo JWT localmente, sem round-trip — mesmo princípio do resto do RBAC). Como o `log-service` não tem porta publicada pro host, quem quiser consultar de fora usa `GET /admin/logs` no catálogo: barra com `403` quem não for admin **antes** de sequer tentar o proxy (`app/routers/admin.py`), e repassa o header `Authorization` original pro `log-service`, que confere de novo — defesa em profundidade, não round-trip redundante à toa.
+
+## Perfil e fotos (object storage, atividade 6)
+
+Cada usuário tem uma página de perfil (`/app/perfil/{id}` no front, `GET /profiles/{id}` na API): nome, foto, uma bio curta (até 280 caracteres) e a lista de filmes favoritados. Qualquer usuário logado vê o perfil de qualquer outro — é rede social —, mas **só o dono edita**.
+
+### Por que a foto não mora no banco
+Dá pra guardar arquivo numa coluna `BLOB` do MySQL, mas banco relacional é otimizado pra linhas pequenas e consultas estruturadas: cada foto de alguns MB incharia o banco, deixaria backup mais pesado e não escala. Então o upload faz **duas gravações separadas**:
+
+```
+Usuário ──foto──▶ Catálogo ──arquivo──▶ Garage   (bucket api-filmes-perfis, chave perfis/{id}/{uuid}.jpg)
+                     └──────chave─────▶ MySQL    (tabela perfis, coluna foto_key)
+```
+
+Exibir o perfil depois é ler a chave em `perfis.foto_key` e montar a URL na hora — o arquivo binário nunca passa pelo banco.
+
+Ordem das gravações (`POST /profiles/{id}/foto`, `app/routers/profiles.py`): primeiro o arquivo vai pro Garage; se o Garage estiver fora, a resposta é `502` e nada é gravado no banco. Depois a chave vai pro MySQL; se o commit falhar, o objeto recém-enviado é apagado (sem a chave no banco, ninguém acharia esse arquivo de novo). Só depois do commit a foto antiga é apagada do bucket.
+
+### Validação do upload
+Em `app/services/imagem.py`, antes de aceitar:
+- **Tamanho:** até 2 MB. O servidor lê no máximo 2 MB + 1 byte, então nem carrega na memória um arquivo maior. Acima disso, responde `413`.
+- **Tipo:** decidido **pelos bytes do arquivo** (Pillow), nunca pelo `Content-Type` nem pela extensão, que são o cliente dizendo o que quiser. Só JPEG, PNG e WEBP; qualquer outra coisa recebe `415`. Um `shell.php` renomeado pra `foto.png` é recusado.
+- **Dimensão:** até 25 milhões de pixels, conferido antes de decodificar (protege contra "decompression bomb", um PNG minúsculo que declara 20000×20000).
+- **Reencodagem:** a imagem é reduzida pra no máximo 1024 px e salva de novo. Isso descarta os metadados EXIF, inclusive a **localização GPS** de quem tirou a foto, e qualquer coisa escondida depois do fim da imagem.
+- A chave do objeto é gerada pelo servidor (`perfis/{id}/{uuid}.{ext}`); o nome do arquivo que o usuário mandou nunca é usado.
+
+### Exibir a imagem: URL pré-assinada, não bucket público
+**Decisão: URL pré-assinada**, válida por 15 minutos (`S3_URL_EXPIRA_SEGUNDOS`), gerada a cada `GET /profiles/{id}`.
+
+| | Bucket com leitura pública | URL pré-assinada (escolhida) |
+|---|---|---|
+| Configuração | Simples: a URL é fixa e previsível (`/bucket/chave`) | O backend assina uma URL nova a cada leitura (`boto3.generate_presigned_url`, sem chamada de rede) |
+| Quem vê a foto | Qualquer um que descobrir ou adivinhar a URL, pra sempre | Só quem recebeu uma URL assinada, e só até ela expirar |
+| Link vazado | Continua funcionando indefinidamente | Para de funcionar sozinho em 15 min |
+| Cache do navegador | Ótimo (URL estável) | Pior (a URL muda a cada carregamento) |
+| No Garage | Nem existe do jeito simples: o Garage **não tem bucket policy/ACL**. Leitura pública só pelo endpoint de *website*, que é outro servidor, outra porta, roteado por nome de host | Suportado direto na API S3 (assinatura SigV4) |
+
+O preço é o cache (a foto é baixada de novo a cada visita ao perfil) e um pouco mais de lógica no backend. Em troca, o bucket nunca fica aberto: sem assinatura válida e dentro do prazo, o Garage responde `403`. No Garage, a opção "pública" ainda exigiria configurar um endpoint de website à parte, então a pré-assinada ficou mais simples **e** mais segura.
+
+**Detalhe de deploy: uma porta só.** O servidor da disciplina expõe só um domínio HTTPS, o do catálogo. E a página HTTPS não pode carregar imagem de um endereço HTTP (o navegador bloqueia), então o Garage não tem como ter porta pública própria. A solução mantém a URL pré-assinada de verdade:
+1. O catálogo assina a URL com o **domínio do próprio catálogo** (`S3_PUBLIC_URL`), por exemplo `https://.../api-filmes-perfis/perfis/7/ab12.jpg?X-Amz-Signature=...`.
+2. O navegador pede esse caminho ao catálogo, que repassa pro Garage pela rede interna **sem tocar em nada que entrou na assinatura**: mesmo caminho, mesma query byte a byte, e o mesmo `Host` que foi assinado (`app/routers/storage_proxy.py`).
+3. **Quem valida a assinatura e a expiração continua sendo o Garage**; o catálogo não decide nada, só devolve a resposta (`200` com a imagem, ou `403`).
+
+Assim o Garage fica igual ao `auth-service`, ao `log-service` e ao `redis`: sem porta publicada.
+
+### Cada um só edita o próprio perfil
+`PATCH /profiles/{id}` (bio) e `POST /profiles/{id}/foto` passam pela dependência `require_dono_do_perfil`, que compara o `{id}` da URL com o `sub` do **JWT**, nunca com algo do corpo da requisição. O schema de entrada nem tem campo `usuario_id`: se alguém mandar um no corpo, o campo é ignorado. Mandar o ID de outra pessoa na URL devolve `403 {"detail":"Você só pode editar o próprio perfil"}` e registra `acesso_negado:perfil:{id}` no log de auditoria (atividade 5). **Nem admin passa**: moderar comentário é uma coisa, reescrever a bio de alguém é outra.
+
+O botão de editar só aparece no próprio perfil (`eh_meu` na resposta), mas isso é interface. Quem garante a regra é o `403`, mesmo chamando a API direto por `curl`.
+
+### De onde vem o nome
+O catálogo é dono do perfil (tabela `perfis`: `usuario_id`, `bio`, `foto_key`), mas o nome mora na tabela `usuarios`, do `auth-service`. `GET /profiles/{id}` busca o nome num endpoint interno novo, `GET /auth/users/{id}`, que devolve só `id` e `nome` (sem e-mail nem papel). Igual a `favoritos` e `comentarios`, `perfis` não tem FK pra `usuarios`: outro serviço, outro dono.
+
+### Por que Garage e não MinIO
+O enunciado sugere MinIO, mas a edição community dele foi arquivada e perdeu recursos (console, imagens Docker publicadas). O professor liberou a troca. O Garage fala a mesma API S3, então o código do catálogo é o de qualquer S3 (`boto3`), e trocar de volta seria só configuração. A partir da v2.3, `garage server --single-node --default-bucket` monta o cluster de um nó e cria a chave de acesso e o bucket a partir de variáveis de ambiente, sem passo manual de `garage layout`/`garage key`. O `garage/garage.toml` não tem segredo nenhum (o `rpc_secret` vem de `GARAGE_RPC_SECRET`) e vai dentro de uma imagem própria (`garage/Dockerfile`), porque no Portainer não há repositório pra montar o arquivo como volume.
 
 ## Recuperação de senha (esqueci minha senha)
 
@@ -153,6 +217,13 @@ SMTP_HOST=sandbox.smtp.mailtrap.io
 SMTP_PORT=587
 SMTP_USER=usuario_do_mailtrap
 SMTP_PASSWORD=senha_do_mailtrap
+
+# Garage (atividade 6) — gere com os comandos do .env.example
+GARAGE_RPC_SECRET=...                    # openssl rand -hex 32
+S3_ACCESS_KEY=GK...                      # echo "GK$(openssl rand -hex 16)"
+S3_SECRET_KEY=...                        # openssl rand -hex 32
+S3_ENDPOINT_URL=http://localhost:3900    # só pra rodar fora do Docker
+S3_PUBLIC_URL=http://localhost:8000      # o endereço pelo qual o site é acessado
 ```
 
 ### 4. Rodar as migrations (catálogo e auth-service)
@@ -160,7 +231,7 @@ SMTP_PASSWORD=senha_do_mailtrap
 .venv/bin/alembic upgrade head
 cd auth-service && ../.venv/bin/alembic upgrade head && cd ..
 ```
-O catálogo cria `favoritos` e `comentarios`; o `auth-service` cria/altera `usuarios` (`role`) e `reset_tokens` — cada um com sua própria tabela de versão do Alembic (`alembic_version` e `alembic_version_auth`), já que dividem o mesmo schema MySQL.
+O catálogo cria `favoritos`, `comentarios` e `perfis`; o `auth-service` cria/altera `usuarios` (`role`) e `reset_tokens` — cada um com sua própria tabela de versão do Alembic (`alembic_version` e `alembic_version_auth`), já que dividem o mesmo schema MySQL.
 
 ### 5. Instalar as dependências do frontend
 ```bash
@@ -169,8 +240,12 @@ cd frontend && npm install
 
 ### 6. Subir em desenvolvimento (5 terminais)
 ```bash
-# Terminal 1 — Redis (só o log-service precisa)
+# Terminal 1 — Redis (só o log-service precisa) e Garage (fotos de perfil)
 docker run --rm -p 6379:6379 redis:7-alpine
+docker build -t api-filmes-garage ./garage && docker run --rm -p 3900:3900 \
+  -e GARAGE_RPC_SECRET -e GARAGE_DEFAULT_ACCESS_KEY="$S3_ACCESS_KEY" \
+  -e GARAGE_DEFAULT_SECRET_KEY="$S3_SECRET_KEY" -e GARAGE_DEFAULT_BUCKET=api-filmes-perfis \
+  api-filmes-garage   # com as variáveis do .env exportadas no shell
 
 # Terminal 2 — log-service (venv próprio, ver passo 2)
 cd log-service
@@ -205,13 +280,13 @@ cd .. && .venv/bin/uvicorn app.main:app
 ```bash
 docker compose up --build
 ```
-- Sobe os quatro containers na mesma rede (`catalog-net`): `api`, `auth-service`, `log-service` e `redis`. Só o `api` publica porta pro host (`:8000`).
+- Sobe os cinco containers na mesma rede (`catalog-net`): `api`, `auth-service`, `log-service`, `redis` e `garage`. Só o `api` publica porta pro host (`:8000`). O `garage` cria sozinho a chave de acesso e o bucket no primeiro boot, a partir de `S3_ACCESS_KEY`/`S3_SECRET_KEY`/`S3_BUCKET` do `.env`.
 - Rodar as migrations do catálogo e do `auth-service` (perfil `tools`, não sobe com o `up` normal — o `log-service` não tem migration, não guarda nada em SQL):
   ```bash
   docker compose run --rm migrate
   docker compose run --rm migrate-auth
   ```
-- Confirmar que `auth-service`, `log-service` e `redis` não têm porta publicada:
+- Confirmar que `auth-service`, `log-service`, `redis` e `garage` não têm porta publicada:
   ```bash
   docker compose ps   # a coluna PORTS só deve vir preenchida pro serviço api
   ```
@@ -253,11 +328,15 @@ Os testes do `log-service` usam `fakeredis` (Redis em memória, sem precisar de 
 | PATCH | `/auth/admin/users/{id}/role` | sim (admin) | Proxy pro `auth-service` — promove/rebaixa o papel de um usuário |
 | POST | `/auth/logout` | sim | Não invalida nada no servidor (JWT é stateless) — só registra o evento de auditoria |
 | GET | `/admin/logs` | sim (admin) | Proxy pro `log-service` — últimos N eventos de auditoria (atividade 5), mais recente primeiro |
+| GET | `/profiles/{id}` | sim | Perfil de qualquer usuário: nome, bio, `foto_url` (pré-assinada, 15 min), favoritos, `eh_meu` |
+| PATCH | `/profiles/{id}` | sim (só o dono) | Edita a bio — `403` se `{id}` não for o do token |
+| POST | `/profiles/{id}/foto` | sim (só o dono) | Upload da foto (`multipart`, campo `arquivo`; JPEG/PNG/WEBP, até 2 MB) — `403`, `413`, `415`, `502` |
+| GET | `/api-filmes-perfis/{chave}?X-Amz-...` | assinatura na URL | Não é rota da API (fora do Swagger): repassa a URL pré-assinada pro Garage, que valida a assinatura |
 
 Autenticação via header `Authorization: Bearer <token>`. "nerd+" = `nerd`, `stalker_do_tomhanks` ou `admin`; "stalker+" = `stalker_do_tomhanks` ou `admin` — a escada é cumulativa (veja [Autorização (RBAC)](#autorização-rbac-atividade-4)).
 
 ### auth-service (interno, sem acesso externo)
-Só respondem pra chamadas vindas do catálogo, dentro da rede `catalog-net`: `/auth/register`, `/auth/login`, `/auth/me`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/admin/users`, `/auth/admin/users/{id}/role`.
+Só respondem pra chamadas vindas do catálogo, dentro da rede `catalog-net`: `/auth/register`, `/auth/login`, `/auth/me`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/admin/users`, `/auth/admin/users/{id}/role`, `/auth/users/{id}` (só `id` e `nome`, pra página de perfil).
 
 ### log-service (interno, sem acesso externo)
 Só respondem pra chamadas vindas do catálogo ou do `auth-service`, dentro da rede `catalog-net`:
@@ -305,12 +384,15 @@ json.dump(app.openapi(), open('../docs/openapi/log-service.json', 'w'), ensure_a
 ## Estrutura do projeto
 ```
 app/                    # catálogo
-  models/       # SQLAlchemy declarative models (favoritos, comentarios)
+  models/       # SQLAlchemy declarative models (favoritos, comentarios, perfis)
   schemas/      # Pydantic (request/response)
   auth/         # verificação local do JWT (get_current_user, require_papel_minimo, require_admin)
   routers/      # rotas da API: quiz.py (pixelado, stalker+), admin.py (moderação de comentários e favoritos),
-                #   auth.py (proxy de /auth/* e /auth/admin/* pro auth-service), comments/favorites (nerd+)
-  services/     # cliente HTTP do auth-service (auth_client.py), do log-service (log_client.py) + cliente da TMDB
+                #   auth.py (proxy de /auth/* e /auth/admin/* pro auth-service), comments/favorites (nerd+),
+                #   profiles.py (perfil + upload de foto, só o dono edita), storage_proxy.py (repasse da URL
+                #   pré-assinada pro Garage)
+  services/     # cliente HTTP do auth-service (auth_client.py), do log-service (log_client.py) + cliente da TMDB,
+                #   storage.py (Garage via boto3), imagem.py (validação/reencodagem da foto com Pillow)
   openapi_responses.py  # blocos de erro (401/403/404/409/502) reaproveitados no responses= de cada rota
   static/       # build de produção do Angular (gerado por `npm run build`, não editar à mão)
 alembic/        # migrations do catálogo
@@ -337,8 +419,10 @@ frontend/       # projeto Angular (standalone components)
     core/       # services (auth/movies/favorites/comments), interceptor de JWT, guards de rota
     layout/     # header (avatar + navegação) e app-shell (layout das rotas privadas)
     shared/     # movie-card (usado no catálogo e nos favoritos, com diálogo de comentários)
-    features/   # telas: auth/login, auth/register, auth/forgot-password, auth/reset-password, catalog, favorites, comments
-docker-compose.yml      # os quatro serviços (api, auth-service, log-service, redis) + rede catalog-net
+    features/   # telas: auth/login, auth/register, auth/forgot-password, auth/reset-password, catalog, favorites,
+                #   comments, profile (perfil com foto, bio e favoritos)
+garage/                 # Dockerfile + garage.toml do object storage (atividade 6), sem segredos
+docker-compose.yml      # os cinco serviços (api, auth-service, log-service, redis, garage) + rede catalog-net
 docs/openapi/           # spec OpenAPI exportada de auth-service e log-service (sem porta publicada,
                         #   Swagger UI deles só dá pra ver local — ver "Documentação da API")
 ```
@@ -352,9 +436,40 @@ docs/openapi/           # spec OpenAPI exportada de auth-service e log-service (
 - Promover/rebaixar o papel de um usuário é `PATCH /auth/admin/users/{id}/role` — só admin (atividade 4). O **primeiro** admin do sistema, esse sim, precisa ser promovido manualmente no banco (`UPDATE usuarios SET role='admin' WHERE id=...`), já que ninguém nasce admin — é o único bootstrap que não tem endpoint de propósito.
 - `npm run build` copia `index.html` para `404.html` em `app/static` (truque padrão do Starlette pra SPA): assim, um refresh direto numa rota do Angular (ex: `/favoritos`) ainda carrega o app em vez de um 404 vazio.
 - Auditoria (atividade 5) é fire-and-forget: uma falha no `log-service` (fora do ar, rede interna com problema) nunca derruba a ação real do usuário — favoritar/comentar/logar não podem virar `500` por causa de um serviço que só observa. O custo é a possibilidade (rara) de perder um evento se o `log-service` cair bem na hora; pra essa atividade, não justifica trocar por fila/retry.
+- Foto de perfil (atividade 6): tipo conferido pelos bytes, não pelo `Content-Type`; tamanho e dimensão limitados antes de decodificar; reencodada (sem EXIF/GPS); chave gerada pelo servidor; bucket privado, lido só por URL pré-assinada com expiração.
 - `log-service` não tem tabela de usuários própria — decodifica o mesmo JWT localmente (mesmo `JWT_SECRET`) pra saber quem é admin, igual o catálogo faz pro resto do RBAC.
 
 ## Evidências
+
+### Atividade 6 — Perfil com foto no object storage
+
+**1. `docker-compose.yml` com o object storage adicionado** (Garage, no lugar do MinIO, ver [Por que Garage](#por-que-garage-e-não-minio)):
+
+```yaml
+  garage:
+    build: ./garage              # dxflrs/garage:v2.3.0 + garage.toml
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
+      GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_KEY}
+      GARAGE_DEFAULT_BUCKET: ${S3_BUCKET:-api-filmes-perfis}
+    expose:
+      - "3900"                   # sem porta publicada: a foto sai pelo domínio do catálogo
+    networks:
+      - catalog-net
+    volumes:
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+```
+
+**2. Perfil com a foto enviada aparecendo de verdade** (servida por URL pré-assinada):
+
+![Página de perfil com foto de upload, bio e filmes favoritos](docs/evidencias/perfil-com-foto.png)
+
+**3. Tentativa recusada de editar o perfil de outro usuário.** Token da Ana (id 34), ID do Bruno (35) na URL, e o corpo ainda tentando reforçar com `"usuario_id": 35`: o backend confere o `{id}` contra o JWT, ignora o corpo e responde `403`. O perfil do Bruno continua intacto, e a tentativa fica no log de auditoria como `acesso_negado:perfil:35`.
+
+![PATCH /profiles/{id de outro usuário} recusado com 403](docs/evidencias/perfil-403-outro-usuario.png)
+
 
 ### Atividade extra — Documentação Swagger/OpenAPI: erro documentado + "Try it out" executado
 

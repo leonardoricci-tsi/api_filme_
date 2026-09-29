@@ -4,10 +4,12 @@ networks:
 
 volumes:
   redis-data:
+  garage-meta:
+  garage-data:
 
 services:
   api:
-    image: leonardoriccitsi/api-filmes:v7
+    image: leonardoriccitsi/api-filmes:v9
     ports:
       - "8215:8000"
     environment:
@@ -17,15 +19,23 @@ services:
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
       AUTH_SERVICE_URL: http://auth-service:8001
       LOG_SERVICE_URL: http://log-service:8002
+      S3_ENDPOINT_URL: http://garage:3900
+      # Domínio público do catálogo: a URL pré-assinada da foto é assinada
+      # com esse host e servida por ele (repasse pro Garage, que não tem porta).
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET:-api-filmes-perfis}
     networks:
       - catalog-net
     depends_on:
       - auth-service
       - log-service
+      - garage
     restart: unless-stopped
 
   auth-service:
-    image: leonardoriccitsi/api-filmes-auth:v5
+    image: leonardoriccitsi/api-filmes-auth:v7
     environment:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
@@ -50,7 +60,7 @@ services:
   # (catálogo, auth-service) e grava num Redis Stream. Mesmo princípio dos
   # outros dois: sem `ports:`, só alcançável de dentro da `catalog-net`.
   log-service:
-    image: leonardoriccitsi/api-filmes-log:v1
+    image: leonardoriccitsi/api-filmes-log:v2
     environment:
       JWT_SECRET: ${JWT_SECRET}
       REDIS_URL: redis://redis:6379/0
@@ -73,4 +83,24 @@ services:
       - catalog-net
     volumes:
       - redis-data:/data
+    restart: unless-stopped
+
+  # Object storage (atividade 6): fotos de perfil. Imagem própria com o
+  # garage.toml dentro (garage/Dockerfile) — aqui não existe o repositório
+  # pra montar o arquivo. Sem `ports:`: o navegador pega a foto pelo
+  # domínio do catálogo, que repassa pra cá pela rede interna.
+  garage:
+    image: leonardoriccitsi/api-filmes-garage:v1
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
+      GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_KEY}
+      GARAGE_DEFAULT_BUCKET: ${S3_BUCKET:-api-filmes-perfis}
+    expose:
+      - "3900"
+    networks:
+      - catalog-net
+    volumes:
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
     restart: unless-stopped

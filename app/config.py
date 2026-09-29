@@ -19,9 +19,10 @@ class Settings(BaseSettings):
     # Object storage (atividade 6): Garage, falado via API S3. Dois endereços
     # porque a URL pré-assinada embute o host na assinatura — o catálogo
     # grava/apaga pela rede interna (s3_endpoint_url), mas assina com o
-    # endereço que o navegador consegue abrir (s3_public_url).
+    # endereço que o navegador abre (s3_public_url): o do PRÓPRIO catálogo,
+    # que repassa a foto pro Garage sem porta pública (routers/storage_proxy.py).
     s3_endpoint_url: str = "http://garage:3900"
-    s3_public_url: str = "http://localhost:3900"
+    s3_public_url: str = "http://localhost:8000"
     s3_access_key: str = ""
     s3_secret_key: str = ""
     s3_bucket: str = "api-filmes-perfis"
