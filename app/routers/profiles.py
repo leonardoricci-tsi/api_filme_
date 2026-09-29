@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -10,9 +12,17 @@ from app.openapi_responses import (
     RESP_403_PERFIL_ALHEIO,
     RESP_404_USUARIO,
     RESP_502_AUTH_SERVICE,
+    RESP_502_STORAGE,
+    RESP_ERROS_FOTO,
 )
 from app.schemas.profile import PerfilOut, PerfilUpdateIn
 from app.services import log_client, storage
+from app.services.imagem import (
+    TAMANHO_MAXIMO_BYTES,
+    ImagemGrandeDemais,
+    ImagemInvalida,
+    processar_foto,
+)
 from app.services.auth_client import AuthServiceUnavailable, forward
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
@@ -125,6 +135,79 @@ def editar_perfil(
     log_client.registrar_evento(
         usuario_atual.id,
         "atualizar_perfil",
+        ip=request.client.host if request.client else None,
+    )
+    return _montar_perfil(usuario_atual.id, usuario_atual, credentials, db)
+
+
+@router.post(
+    "/{usuario_id}/foto",
+    response_model=PerfilOut,
+    responses=RESP_401
+    | RESP_403_PERFIL_ALHEIO
+    | RESP_ERROS_FOTO
+    | RESP_404_USUARIO
+    | RESP_502_AUTH_SERVICE
+    | RESP_502_STORAGE,
+)
+def enviar_foto(
+    usuario_id: int,
+    request: Request,
+    arquivo: UploadFile = File(..., description="JPEG, PNG ou WEBP, até 2 MB"),
+    usuario_atual: UsuarioAutenticado = Depends(require_dono_do_perfil),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> PerfilOut:
+    """Uma ação de upload, duas gravações separadas: o arquivo vai pro
+    Garage, só a chave do objeto vai pro MySQL."""
+    # Lê no máximo 1 byte além do limite — o suficiente pra saber que
+    # passou, sem carregar um arquivo de 1 GB inteiro na memória.
+    try:
+        conteudo, extensao, content_type = processar_foto(
+            arquivo.file.read(TAMANHO_MAXIMO_BYTES + 1)
+        )
+    except ImagemGrandeDemais as erro:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Imagem acima de 2 MB"
+        ) from erro
+    except ImagemInvalida as erro:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Envie uma imagem JPEG, PNG ou WEBP",
+        ) from erro
+
+    # Chave gerada pelo servidor (nunca o nome de arquivo do cliente); o
+    # uuid novo a cada upload evita que o navegador mostre a foto antiga
+    # do cache e que dois uploads seguidos se sobrescrevam.
+    chave_nova = f"perfis/{usuario_atual.id}/{uuid4().hex}.{extensao}"
+    try:
+        storage.enviar_objeto(chave_nova, conteudo, content_type)
+    except storage.StorageUnavailable as erro:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(erro)) from erro
+
+    perfil = db.get(Perfil, usuario_atual.id)
+    if perfil is None:
+        perfil = Perfil(usuario_id=usuario_atual.id)
+        db.add(perfil)
+    chave_antiga = perfil.foto_key
+    perfil.foto_key = chave_nova
+    try:
+        db.commit()
+    except Exception:
+        # O arquivo já subiu mas o banco não registrou: sem a chave no
+        # banco, ninguém nunca mais acha esse objeto — apaga pra não virar lixo.
+        db.rollback()
+        storage.apagar_objeto(chave_nova)
+        raise
+
+    # Só depois do commit: se o banco tivesse falhado, a foto antiga ainda
+    # seria a referenciada e não podia sumir.
+    if chave_antiga:
+        storage.apagar_objeto(chave_antiga)
+
+    log_client.registrar_evento(
+        usuario_atual.id,
+        "upload_foto_perfil",
         ip=request.client.host if request.client else None,
     )
     return _montar_perfil(usuario_atual.id, usuario_atual, credentials, db)

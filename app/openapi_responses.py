@@ -39,6 +39,21 @@ RESP_403_PERFIL_ALHEIO = {
 
 RESP_404_USUARIO = {404: _erro("usuario_id não existe no auth-service", "Usuário não encontrado")}
 
+RESP_ERROS_FOTO = {
+    413: _erro("Arquivo acima do tamanho máximo (2 MB)", "Imagem acima de 2 MB"),
+    415: _erro(
+        "Arquivo não é uma imagem JPEG, PNG ou WEBP válida (conferido pelo conteúdo, não pela extensão)",
+        "Envie uma imagem JPEG, PNG ou WEBP",
+    ),
+}
+
+RESP_502_STORAGE = {
+    502: _erro(
+        "Object storage (Garage) fora do ar ou recusou a gravação",
+        "Armazenamento de arquivos indisponível no momento",
+    )
+}
+
 RESP_409_FAVORITO = {409: _erro("Esse filme já está nos favoritos do usuário", "Filme já favoritado")}
 
 RESP_502_AUTH_SERVICE = {

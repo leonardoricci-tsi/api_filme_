@@ -1,4 +1,3 @@
-import pytest
 import respx
 from httpx import Response
 
@@ -7,19 +6,6 @@ from app.models import Perfil
 from tests.conftest import auth_headers, criar_token
 
 AUTH_URL = get_settings().auth_service_url
-LOG_SERVICE_URL = get_settings().log_service_url
-
-
-@pytest.fixture()
-def auth_service():
-    """Mocka o `GET /auth/users/{id}` do auth-service (de onde vem o nome) e
-    o log-service, que o catálogo chama em fire-and-forget."""
-    with respx.mock(assert_all_called=False) as mock:
-        mock.get(url__regex=rf"{AUTH_URL}/auth/users/(?P<id>\d+)").mock(
-            side_effect=lambda request, id: Response(200, json={"id": int(id), "nome": f"Usuário {id}"})
-        )
-        mock.post(f"{LOG_SERVICE_URL}/logs").mock(return_value=Response(201, json={"id": "1-0"}))
-        yield mock
 
 
 def criar_favorito(client, token, tmdb_movie_id=13, titulo="Forrest Gump"):

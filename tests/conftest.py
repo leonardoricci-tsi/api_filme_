@@ -2,7 +2,9 @@ import itertools
 
 import jwt
 import pytest
+import respx
 from fastapi.testclient import TestClient
+from httpx import Response
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -67,3 +69,17 @@ def criar_token(
 
 def auth_headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture()
+def auth_service():
+    """Mocka o `GET /auth/users/{id}` do auth-service (de onde vem o nome) e
+    o log-service, que o catálogo chama em fire-and-forget."""
+    settings = get_settings()
+    auth_url, log_url = settings.auth_service_url, settings.log_service_url
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(url__regex=rf"{auth_url}/auth/users/(?P<id>\d+)").mock(
+            side_effect=lambda request, id: Response(200, json={"id": int(id), "nome": f"Usuário {id}"})
+        )
+        mock.post(f"{log_url}/logs").mock(return_value=Response(201, json={"id": "1-0"}))
+        yield mock
