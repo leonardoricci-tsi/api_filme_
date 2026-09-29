@@ -30,6 +30,7 @@
           <span class="tag-role" [class.admin]="authService.isAdmin()">{{ nomePapel }}</span>
         </div>
         <p class="email">{{ authService.usuario()?.email }}</p>
+        <a class="btn-perfil" routerLink="/app/perfil" (click)="menuAberto.set(false)">Meu perfil</a>
         <button class="btn-sair" (click)="sair()">Sair</button>
       </div>
     }

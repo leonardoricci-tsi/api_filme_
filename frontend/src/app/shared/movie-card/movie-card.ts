@@ -10,6 +10,7 @@ import {
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 
 import { CommentsService } from '../../core/services/comments.service';
 import { MoviesService } from '../../core/services/movies.service';
@@ -21,7 +22,7 @@ type Aba = 'comentarios' | 'assistir' | 'elenco';
 @Component({
   selector: 'app-movie-card',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './movie-card.html',
   styleUrl: './movie-card.css',
 })

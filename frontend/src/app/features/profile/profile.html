@@ -1,0 +1,81 @@
+@if (carregando()) {
+  <p>Carregando...</p>
+} @else if (perfil(); as p) {
+  <section class="cabecalho">
+    <div class="foto-area">
+      @if (p.foto_url) {
+        <img class="foto" [src]="p.foto_url" [alt]="'Foto de ' + p.nome" />
+      } @else {
+        <div class="foto foto-vazia">{{ iniciais }}</div>
+      }
+
+      <!-- Só interface: quem garante que só o dono troca a foto é o 403 do backend. -->
+      @if (p.eh_meu) {
+        <label class="btn-foto" [class.desabilitado]="enviandoFoto()">
+          {{ enviandoFoto() ? 'Enviando...' : p.foto_url ? 'Trocar foto' : 'Enviar foto' }}
+          <input
+            type="file"
+            [accept]="tiposAceitos"
+            [disabled]="enviandoFoto()"
+            (change)="escolherFoto($event)"
+            hidden
+          />
+        </label>
+      }
+      @if (erroFoto()) {
+        <p class="erro">{{ erroFoto() }}</p>
+      }
+    </div>
+
+    <div class="info">
+      <h1>{{ p.nome }}</h1>
+
+      @if (editandoBio()) {
+        <textarea
+          [ngModel]="bioRascunho()"
+          (ngModelChange)="bioRascunho.set($event)"
+          [maxlength]="bioMaximo"
+          rows="3"
+          placeholder="Conte um pouco sobre você (e sobre o Tom Hanks)"
+        ></textarea>
+        <div class="acoes-bio">
+          <span class="contador">{{ bioRascunho().length }}/{{ bioMaximo }}</span>
+          <button class="btn-secundario" (click)="cancelarEdicaoBio()">Cancelar</button>
+          <button class="btn-primario" [disabled]="salvandoBio()" (click)="salvarBio()">
+            {{ salvandoBio() ? 'Salvando...' : 'Salvar' }}
+          </button>
+        </div>
+      } @else {
+        <p class="bio" [class.vazia]="!p.bio">
+          {{ p.bio || (p.eh_meu ? 'Você ainda não escreveu uma bio.' : 'Sem bio por enquanto.') }}
+        </p>
+        @if (p.eh_meu) {
+          <button class="btn-secundario" (click)="comecarEdicaoBio()">Editar bio</button>
+        }
+      }
+      @if (erro()) {
+        <p class="erro">{{ erro() }}</p>
+      }
+    </div>
+  </section>
+
+  <h2>Filmes favoritos</h2>
+  @if (p.favoritos.length === 0) {
+    <p class="vazio">Nenhum filme favoritado ainda.</p>
+  } @else {
+    <div class="grid">
+      @for (favorito of p.favoritos; track favorito.id) {
+        <figure class="filme">
+          @if (posterUrl(favorito.poster_path); as poster) {
+            <img [src]="poster" [alt]="favorito.titulo" loading="lazy" />
+          } @else {
+            <div class="poster-vazio">Sem pôster</div>
+          }
+          <figcaption>{{ favorito.titulo }}</figcaption>
+        </figure>
+      }
+    </div>
+  }
+} @else {
+  <p class="erro">{{ erro() }}</p>
+}

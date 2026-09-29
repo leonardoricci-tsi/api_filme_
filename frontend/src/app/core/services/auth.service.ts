@@ -31,12 +31,30 @@ const NIVEL_PAPEL: Record<string, number> = {
   admin: 4,
 };
 
+function idDoToken(token: string | null): number | null {
+  if (!token) {
+    return null;
+  }
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const id = Number(JSON.parse(atob(payload)).sub);
+    return Number.isInteger(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly _token = signal<string | null>(localStorage.getItem(TOKEN_KEY));
   private readonly _usuario = signal<UsuarioLogado | null>(this.lerUsuarioSalvo());
 
   readonly isAuthenticated = computed(() => this._token() !== null);
+  // Id do usuário logado, lido do `sub` do JWT (não precisa de chamada nem
+  // de mais um item no localStorage). Só pra montar o link "meu perfil" —
+  // o backend confere a identidade de novo, do token assinado, em toda
+  // requisição.
+  readonly usuarioId = computed(() => idDoToken(this._token()));
   readonly usuario = this._usuario.asReadonly();
 
   constructor(private readonly http: HttpClient) {}

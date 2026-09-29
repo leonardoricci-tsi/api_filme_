@@ -37,6 +37,15 @@ export const routes: Routes = [
         loadComponent: () => import('./features/catalog/catalog').then((m) => m.Catalog),
       },
       {
+        // Sem id = o próprio perfil (o componente usa o id do JWT).
+        path: 'perfil',
+        loadComponent: () => import('./features/profile/profile').then((m) => m.Profile),
+      },
+      {
+        path: 'perfil/:id',
+        loadComponent: () => import('./features/profile/profile').then((m) => m.Profile),
+      },
+      {
         path: 'favoritos',
         loadComponent: () => import('./features/favorites/favorites').then((m) => m.Favorites),
       },

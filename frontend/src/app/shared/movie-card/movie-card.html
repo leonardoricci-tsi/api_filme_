@@ -81,7 +81,9 @@
             @for (comentario of comentarios(); track comentario.id) {
               <li>
                 <div class="comentario-texto">
-                  <strong class="comentario-autor">{{ comentario.nome_usuario || 'Usuário' }}</strong>
+                  <a class="comentario-autor" [routerLink]="['/app/perfil', comentario.usuario_id]">{{
+                    comentario.nome_usuario || 'Usuário'
+                  }}</a>
                   <span>{{ comentario.texto }}</span>
                 </div>
                 @if (comentario.meu) {

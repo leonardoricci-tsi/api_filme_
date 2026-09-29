@@ -20,6 +20,7 @@ def _to_out(comentario: Comentario, usuario_atual_id: int) -> CommentOut:
         tmdb_movie_id=comentario.tmdb_movie_id,
         titulo=comentario.titulo,
         poster_path=comentario.poster_path,
+        usuario_id=comentario.usuario_id,
         nome_usuario=comentario.nome_usuario,
         texto=comentario.texto,
         criado_em=comentario.criado_em,

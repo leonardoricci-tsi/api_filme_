@@ -17,6 +17,9 @@ class CommentOut(BaseModel):
     tmdb_movie_id: int
     titulo: str | None
     poster_path: str | None
+    # Pro link "ver perfil" no nome do autor (atividade 6) — o perfil já é
+    # público pra qualquer logado, então expor o id não vaza nada novo.
+    usuario_id: int
     nome_usuario: str | None
     texto: str
     criado_em: datetime

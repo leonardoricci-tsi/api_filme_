@@ -246,7 +246,13 @@ dialog.dialog-detalhes::backdrop {
 
 .comentario-autor {
   font-size: 0.78rem;
+  font-weight: 700;
   color: #d9a441;
+  text-decoration: none;
+}
+
+.comentario-autor:hover {
+  text-decoration: underline;
 }
 
 .btn-remover {
