@@ -1,0 +1,45 @@
+# Só pro CI (smoke test do .github/workflows/ci.yml), usado por cima do
+# docker-compose.yml: `docker compose -f docker-compose.yml -f docker-compose.ci.yml`.
+#
+# Em produção o MySQL é remoto e fica fora do compose; no runner do GitHub
+# não existe banco nenhum, então este arquivo acrescenta um MySQL descartável
+# (vive só durante o run, senha gerada ali mesmo pelo workflow) e faz o
+# catálogo, o auth-service e as migrations esperarem ele ficar pronto.
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: api_filmes
+      MYSQL_USER: ${CI_DB_USER}
+      MYSQL_PASSWORD: ${CI_DB_PASSWORD}
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    networks:
+      - catalog-net
+    healthcheck:
+      # Via TCP de propósito: durante a inicialização o MySQL sobe um
+      # servidor temporário sem rede, então o ping só passa quando o banco
+      # final (com usuário e database já criados) está aceitando conexão.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+
+  migrate:
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  migrate-auth:
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  api:
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  auth-service:
+    depends_on:
+      mysql:
+        condition: service_healthy

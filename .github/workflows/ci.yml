@@ -79,3 +79,64 @@ jobs:
           # install só roda de novo quando o arquivo de dependências muda.
           cache-from: type=gha,scope=${{ matrix.servico }}
           cache-to: type=gha,mode=max,scope=${{ matrix.servico }}
+
+  # Sobe a stack INTEIRA de verdade (catálogo, auth-service, log-service,
+  # Redis, Garage + um MySQL descartável) e exercita o caminho real: login,
+  # upload de foto pro Garage, URL pré-assinada, 403 no perfil alheio,
+  # evento no log de auditoria. Os testes acima usam mock; este não.
+  smoke-test:
+    name: Smoke test — stack de pé
+    needs: [testes-catalogo, testes-log-service]
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE_FILE: docker-compose.yml:docker-compose.ci.yml
+      COMPOSE_PROJECT_NAME: smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      # O docker-compose.yml lê o .env — no runner ele não existe, então é
+      # gerado aqui com valores DESCARTÁVEIS, aleatórios a cada run: senha
+      # do MySQL temporário, JWT_SECRET, chaves do Garage. Nenhum é segredo
+      # de verdade (nada disso existe fora deste run) e nenhum fica no repo.
+      # TMDB/SMTP recebem valor fictício: o smoke test não passa por eles.
+      - name: Gerar .env descartável
+        run: |
+          DB_PASSWORD="$(openssl rand -hex 16)"
+          {
+            echo "CI_DB_USER=ci"
+            echo "CI_DB_PASSWORD=$DB_PASSWORD"
+            echo "DATABASE_URL=mysql+pymysql://ci:$DB_PASSWORD@mysql:3306/api_filmes"
+            echo "JWT_SECRET=$(openssl rand -hex 32)"
+            echo "TMDB_API_KEY=ci-fake"
+            echo "SMTP_USER=ci-fake"
+            echo "SMTP_PASSWORD=ci-fake"
+            echo "GARAGE_RPC_SECRET=$(openssl rand -hex 32)"
+            echo "S3_ACCESS_KEY=GK$(openssl rand -hex 16)"
+            echo "S3_SECRET_KEY=$(openssl rand -hex 32)"
+          } > .env
+
+      - name: Build das imagens
+        run: docker compose build
+
+      # Ordem importa: a migration inicial do catálogo cria `usuarios`, e a
+      # do auth-service só acrescenta colunas nela. De quebra, prova que o
+      # banco inteiro sai do zero só com as migrations.
+      - name: MySQL + migrations
+        run: |
+          docker compose up -d --wait mysql
+          docker compose run --rm migrate
+          docker compose run --rm migrate-auth
+
+      - name: Subir a stack
+        run: docker compose up -d --wait
+
+      - name: Smoke test
+        run: scripts/smoke-test.sh http://localhost:8000
+
+      - name: Logs dos containers (só se falhou)
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+
+      - name: Derrubar a stack
+        if: always()
+        run: docker compose down -v
