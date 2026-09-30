@@ -2,7 +2,9 @@
 # ainda funciona — os testes passam, as 4 imagens Docker buildam e a stack
 # inteira sobe e responde (smoke test). Qualquer falha deixa o commit
 # marcado como quebrado (vermelho) no GitHub. Se tudo passou e é um push na
-# main, publica as imagens no GHCR com tag ligada ao commit (sha-xxxxxxx).
+# main, publica as imagens no GHCR com tag ligada ao commit (sha-xxxxxxx) e
+# faz o deploy: aponta o docker-compose.portainer.yml pra essa tag, e o
+# Portainer (stack via Git) sobe a versão nova sozinho.
 #
 # Nenhum segredo aqui: os testes rodam com SQLite em memória e mocks, e o
 # ambiente deles (segredos fictícios, serviços apontando pra porta fechada)
@@ -202,3 +204,51 @@ jobs:
           # Mesmo cache do job de build acima: a imagem já foi buildada
           # neste run, aqui é praticamente só empacotar e subir.
           cache-from: type=gha,scope=${{ matrix.servico }}
+
+  # Deploy (GitOps): não acessa o servidor — só escreve no repositório QUAL
+  # versão deve estar no ar. Reescreve as tags do docker-compose.portainer.yml
+  # pra sha-<commit> e faz um commit automático. A stack do Portainer é
+  # criada a partir deste repositório com atualização automática: ela
+  # percebe a mudança e sobe exatamente essas imagens.
+  #
+  # O commit do robô não dispara outro CI: push feito com o GITHUB_TOKEN não
+  # gera novo run (regra do próprio Actions), e o [skip ci] reforça.
+  deploy:
+    name: Deploy — aponta produção pro commit
+    needs: publicar
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      # Opcional. Se o secret existir, avisa o Portainer na hora (webhook da
+      # stack) em vez de esperar o próximo polling. A URL do webhook é
+      # credencial — quem tem ela pode forçar redeploy — por isso é Secret.
+      PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apontar o compose de produção pra tag deste commit
+        run: |
+          TAG="sha-${GITHUB_SHA::7}"
+          sed -E -i "s#(image: ghcr\.io/${GITHUB_REPOSITORY_OWNER}/api-filmes[a-z-]*):.*#\1:${TAG}#" docker-compose.portainer.yml
+          grep -n "image: ghcr.io" docker-compose.portainer.yml
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Commit automático
+        run: |
+          if git diff --quiet docker-compose.portainer.yml; then
+            echo "Compose já aponta pra $TAG (re-run do mesmo commit) — nada a commitar."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "deploy: $TAG [skip ci]"
+          # Se alguém deu push no meio do caminho, rebase em cima da main
+          # nova. (O run desse push novo também vai fazer o próprio deploy.)
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Avisar o Portainer (webhook, se configurado)
+        if: env.PORTAINER_WEBHOOK_URL != ''
+        run: curl -fsS -X POST "$PORTAINER_WEBHOOK_URL"

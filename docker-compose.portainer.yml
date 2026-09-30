@@ -1,3 +1,12 @@
+# Stack de produção (Portainer), criada A PARTIR DESTE REPOSITÓRIO (stack
+# via Git, com atualização automática). As tags sha-xxxxxxx abaixo NÃO são
+# editadas à mão: a cada push na main que passa no CI, o job "Deploy" do
+# .github/workflows/ci.yml publica as imagens no GHCR e reescreve essas
+# tags pro commit novo (commit automático "deploy: sha-..."). O Portainer
+# percebe a mudança no repositório e sobe exatamente essa versão.
+#
+# Segredos (DATABASE_URL, JWT_SECRET, TMDB_API_KEY, SMTP_*, GARAGE_*, S3_*)
+# ficam nas variáveis de ambiente da stack no Portainer — nunca aqui.
 networks:
   catalog-net:
     driver: bridge
@@ -9,7 +18,7 @@ volumes:
 
 services:
   api:
-    image: leonardoriccitsi/api-filmes:v9
+    image: ghcr.io/leonardoricci-tsi/api-filmes:sha-8c6671e
     ports:
       - "8215:8000"
     environment:
@@ -35,7 +44,7 @@ services:
     restart: unless-stopped
 
   auth-service:
-    image: leonardoriccitsi/api-filmes-auth:v7
+    image: ghcr.io/leonardoricci-tsi/api-filmes-auth:sha-8c6671e
     environment:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
@@ -60,7 +69,7 @@ services:
   # (catálogo, auth-service) e grava num Redis Stream. Mesmo princípio dos
   # outros dois: sem `ports:`, só alcançável de dentro da `catalog-net`.
   log-service:
-    image: leonardoriccitsi/api-filmes-log:v2
+    image: ghcr.io/leonardoricci-tsi/api-filmes-log:sha-8c6671e
     environment:
       JWT_SECRET: ${JWT_SECRET}
       REDIS_URL: redis://redis:6379/0
@@ -90,7 +99,7 @@ services:
   # pra montar o arquivo. Sem `ports:`: o navegador pega a foto pelo
   # domínio do catálogo, que repassa pra cá pela rede interna.
   garage:
-    image: leonardoriccitsi/api-filmes-garage:v1
+    image: ghcr.io/leonardoricci-tsi/api-filmes-garage:sha-8c6671e
     environment:
       GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
       GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY}
