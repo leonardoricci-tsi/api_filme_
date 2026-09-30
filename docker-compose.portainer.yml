@@ -18,7 +18,7 @@ volumes:
 
 services:
   api:
-    image: ghcr.io/leonardoricci-tsi/api-filmes:sha-dc4cf20
+    image: ghcr.io/leonardoricci-tsi/api-filmes:sha-24b40b2
     ports:
       - "8215:8000"
     # /metrics numa porta à parte, NÃO publicada: a 8000 é pública, a 9100 só
@@ -57,7 +57,7 @@ services:
     restart: unless-stopped
 
   auth-service:
-    image: ghcr.io/leonardoricci-tsi/api-filmes-auth:sha-dc4cf20
+    image: ghcr.io/leonardoricci-tsi/api-filmes-auth:sha-24b40b2
     environment:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
@@ -90,7 +90,7 @@ services:
   # (catálogo, auth-service) e grava num Redis Stream. Mesmo princípio dos
   # outros dois: sem `ports:`, só alcançável de dentro da `catalog-net`.
   log-service:
-    image: ghcr.io/leonardoricci-tsi/api-filmes-log:sha-dc4cf20
+    image: ghcr.io/leonardoricci-tsi/api-filmes-log:sha-24b40b2
     environment:
       JWT_SECRET: ${JWT_SECRET}
       REDIS_URL: redis://redis:6379/0
@@ -134,7 +134,7 @@ services:
   # pra montar o arquivo. Sem `ports:`: o navegador pega a foto pelo
   # domínio do catálogo, que repassa pra cá pela rede interna.
   garage:
-    image: ghcr.io/leonardoricci-tsi/api-filmes-garage:sha-dc4cf20
+    image: ghcr.io/leonardoricci-tsi/api-filmes-garage:sha-24b40b2
     environment:
       GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
       GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY}
