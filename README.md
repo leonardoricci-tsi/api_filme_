@@ -524,6 +524,10 @@ docs/openapi/           # spec OpenAPI exportada de auth-service e log-service (
 
 ![Containers da stack no Portainer rodando as imagens do GHCR com a tag sha-e424517](docs/evidencias/cicd-container-tag-commit.png)
 
+**3. Deploy automático de ponta a ponta, sem clique:** o push do commit `7b185e1` (a documentação desta seção) passou pelo [run 36768320775](https://github.com/leonardoricci-tsi/api_filme_/actions/runs/36768320775), todo verde. O job Deploy fez o commit `deploy: sha-7b185e1 [skip ci]`, e o Portainer, por polling, recriou sozinho os 4 containers com a tag nova, sem ninguém abrir o Portainer. O `redis`, que não mudou, ficou intacto (criado uma hora antes):
+
+![Mesmos containers, agora com a tag sha-7b185e1, recriados automaticamente pelo Portainer](docs/evidencias/cicd-deploy-automatico.png)
+
 ### Atividade 6 — Perfil com foto no object storage
 
 **1. `docker-compose.yml` com o object storage adicionado** (Garage, no lugar do MinIO, ver [Por que Garage](#por-que-garage-e-não-minio)):
