@@ -21,7 +21,13 @@
   </nav>
 
   <div class="perfil">
-    <button class="avatar" (click)="toggleMenu()">{{ iniciais }}</button>
+    <button class="avatar" (click)="toggleMenu()" [attr.aria-label]="'Menu de ' + (authService.usuario()?.nome ?? 'usuário')">
+      @if (profileService.minhaFotoUrl(); as foto) {
+        <img [src]="foto" alt="" />
+      } @else {
+        {{ iniciais }}
+      }
+    </button>
 
     @if (menuAberto()) {
       <div class="menu-perfil">
