@@ -1,6 +1,8 @@
-# CI (atividade extra de CI/CD): a cada push ou pull request, confere se o
-# código ainda funciona — os testes passam e as 4 imagens Docker buildam.
-# Qualquer falha deixa o commit marcado como quebrado (vermelho) no GitHub.
+# CI/CD (atividade extra): a cada push ou pull request, confere se o código
+# ainda funciona — os testes passam, as 4 imagens Docker buildam e a stack
+# inteira sobe e responde (smoke test). Qualquer falha deixa o commit
+# marcado como quebrado (vermelho) no GitHub. Se tudo passou e é um push na
+# main, publica as imagens no GHCR com tag ligada ao commit (sha-xxxxxxx).
 #
 # Nenhum segredo aqui: os testes rodam com SQLite em memória e mocks, e o
 # ambiente deles (segredos fictícios, serviços apontando pra porta fechada)
@@ -140,3 +142,63 @@ jobs:
       - name: Derrubar a stack
         if: always()
         run: docker compose down -v
+
+  # CD: só chega aqui se TUDO acima passou, e só em push na main (pull
+  # request e outras branches só testam). Publica as 4 imagens no GHCR com
+  # duas tags: sha-<7 primeiros caracteres do commit> — rastreável, é essa
+  # que roda em produção — e latest.
+  #
+  # Autentica com o GITHUB_TOKEN que o próprio Actions cria pra cada run
+  # (vale só durante o run, escopo deste repositório) — não existe senha
+  # de registry guardada em lugar nenhum.
+  publicar:
+    name: Publicar — ${{ matrix.servico }}
+    needs: [testes-catalogo, testes-log-service, build-imagens, smoke-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - servico: api
+            contexto: .
+            imagem: api-filmes
+          - servico: auth-service
+            contexto: ./auth-service
+            imagem: api-filmes-auth
+          - servico: log-service
+            contexto: ./log-service
+            imagem: api-filmes-log
+          - servico: garage
+            contexto: ./garage
+            imagem: api-filmes-garage
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Gera as tags (sha-abc1234 + latest) e os labels OCI — o label
+      # org.opencontainers.image.source liga o pacote a este repositório.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.imagem }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.contexto }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Mesmo cache do job de build acima: a imagem já foi buildada
+          # neste run, aqui é praticamente só empacotar e subir.
+          cache-from: type=gha,scope=${{ matrix.servico }}
