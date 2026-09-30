@@ -1,0 +1,81 @@
+# CI (atividade extra de CI/CD): a cada push ou pull request, confere se o
+# código ainda funciona — os testes passam e as 4 imagens Docker buildam.
+# Qualquer falha deixa o commit marcado como quebrado (vermelho) no GitHub.
+#
+# Nenhum segredo aqui: os testes rodam com SQLite em memória e mocks, e o
+# ambiente deles (segredos fictícios, serviços apontando pra porta fechada)
+# é definido no próprio tests/conftest.py — não existe .env no runner.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Dois pushes seguidos na mesma branch: o run antigo é cancelado, só o do
+# commit mais novo importa.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  testes-catalogo:
+    name: Testes — catálogo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: pip install -r requirements.txt
+      - run: pytest -v
+
+  testes-log-service:
+    name: Testes — log-service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: log-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: log-service/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -v
+
+  build-imagens:
+    name: Build — ${{ matrix.servico }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # A imagem do catálogo também compila o Angular (stage 1 do
+          # Dockerfile) — build do front quebrado quebra aqui.
+          - servico: api
+            contexto: .
+          - servico: auth-service
+            contexto: ./auth-service
+          - servico: log-service
+            contexto: ./log-service
+          - servico: garage
+            contexto: ./garage
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.contexto }}
+          platforms: linux/amd64
+          push: false
+          # Cache das camadas entre runs (por serviço) — o npm ci / pip
+          # install só roda de novo quando o arquivo de dependências muda.
+          cache-from: type=gha,scope=${{ matrix.servico }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.servico }}
