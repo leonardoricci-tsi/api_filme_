@@ -12,6 +12,10 @@ services:
     build: .
     ports:
       - "${PORT:-8000}:8000"
+    # /metrics numa porta à parte, NÃO publicada: a 8000 é pública, a 9100 só
+    # existe na rede interna (quem lê é o Prometheus).
+    expose:
+      - "9100"
     env_file:
       - .env
     environment:
@@ -58,6 +62,7 @@ services:
       LOG_SERVICE_URL: http://log-service:8002
     expose:
       - "8001"
+      - "9100"   # /metrics (Prometheus), só na rede interna
     # GET /health: 503 com o MySQL fora → (unhealthy).
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8001/health', timeout=4)"]
@@ -93,6 +98,7 @@ services:
       REDIS_URL: redis://redis:6379/0
     expose:
       - "8002"
+      - "9100"   # /metrics (Prometheus), só na rede interna
     # GET /health: 503 com o Redis fora → (unhealthy) sozinho, sem ninguém
     # mexer no log-service (é a prova pedida na atividade de observabilidade).
     healthcheck:

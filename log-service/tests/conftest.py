@@ -6,6 +6,8 @@ from fakeredis import FakeRedis
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("JWT_SECRET", "segredo-de-teste")
+# Sem servidor de métricas na 9100: cada TestClient reabriria a porta.
+os.environ["METRICS_PORT"] = "0"
 
 from app.config import get_settings  # noqa: E402
 from app.main import app  # noqa: E402

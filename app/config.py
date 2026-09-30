@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # Tem que bater com o `s3_region` do garage.toml, senão a assinatura falha.
     s3_region: str = "garage"
     s3_url_expira_segundos: int = 900
+    # Porta interna do /metrics (Prometheus). 0 desliga — usado nos testes.
+    metrics_port: int = 9100
 
 
 @lru_cache

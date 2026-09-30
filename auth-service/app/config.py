@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_expire_minutes: int = 60
     jwt_algorithm: str = "HS256"
+    # Porta interna do /metrics (Prometheus). 0 desliga — usado nos testes.
+    metrics_port: int = 9100
     # Nome do serviço no docker-compose (rede interna) — auditoria de login
     # e de tentativa negada (403) nas rotas de admin (atividade 5).
     log_service_url: str = "http://log-service:8002"

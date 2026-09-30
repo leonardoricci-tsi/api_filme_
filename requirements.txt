@@ -14,6 +14,10 @@ pillow==11.1.0
 python-multipart==0.0.32
 boto3==1.43.103
 
+# Observabilidade: /metrics (Prometheus) — contagem por rota/status e latência
+prometheus-fastapi-instrumentator==7.1.0
+prometheus-client==0.26.0
+
 # dev / testes
 pytest==8.3.4
 respx==0.22.0

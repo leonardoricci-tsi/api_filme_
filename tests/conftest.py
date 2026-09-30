@@ -17,6 +17,8 @@ os.environ["JWT_SECRET"] = "teste-jwt-secret-fake"
 os.environ["AUTH_SERVICE_URL"] = "http://127.0.0.1:9"
 os.environ["LOG_SERVICE_URL"] = "http://127.0.0.1:9"
 os.environ["S3_ENDPOINT_URL"] = "http://127.0.0.1:9"
+# Sem servidor de métricas na 9100: cada TestClient reabriria a porta.
+os.environ["METRICS_PORT"] = "0"
 
 # Imports a partir daqui de propósito depois do ambiente acima.
 import jwt

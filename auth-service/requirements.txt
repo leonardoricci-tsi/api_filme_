@@ -10,6 +10,10 @@ bcrypt==4.2.1
 pyjwt==2.10.1
 python-dotenv==1.0.1
 
+# Observabilidade: /metrics (Prometheus) — contagem por rota/status e latência
+prometheus-fastapi-instrumentator==7.1.0
+prometheus-client==0.26.0
+
 # dev / testes
 pytest==8.3.4
 httpx==0.28.1

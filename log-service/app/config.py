@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     # localmente pra decidir quem é admin, sem round-trip pro auth-service.
     jwt_secret: str
     jwt_algorithm: str = "HS256"
+    # Porta interna do /metrics (Prometheus). 0 desliga — usado nos testes.
+    metrics_port: int = 9100
 
 
 @lru_cache
