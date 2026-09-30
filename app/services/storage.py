@@ -74,6 +74,14 @@ def apagar_objeto(chave: str) -> None:
         pass
 
 
+def verificar_bucket() -> None:
+    """Pro /health: o Garage responde e o bucket existe (HEAD, sem baixar nada)."""
+    try:
+        _get_client_interno().head_bucket(Bucket=get_settings().s3_bucket)
+    except (BotoCoreError, ClientError) as erro:
+        raise StorageUnavailable("Armazenamento de arquivos indisponível no momento") from erro
+
+
 def gerar_url_temporaria(chave: str) -> str:
     """URL pré-assinada (GET) que expira em `s3_url_expira_segundos`. O
     bucket continua privado: sem essa assinatura, o Garage não serve nada."""
