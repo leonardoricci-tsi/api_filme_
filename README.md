@@ -12,10 +12,13 @@ API FastAPI que lista filmes do Tom Hanks (dados sempre ao vivo da TMDB, nunca p
 
 **Atividade extra — CI/CD com GitHub Actions:** deploy sem clicar em nada. A cada `git push`, o GitHub Actions roda os testes, builda as imagens e sobe a stack inteira pra um smoke test; se tudo passou, publica as imagens no GHCR com a tag do commit (`sha-xxxxxxx`) e o Portainer coloca essa versão no ar sozinho. Veja a seção [CI/CD](#cicd-github-actions-atividade-extra).
 
+**Atividade extra — Observabilidade:** cada serviço agora diz como está de saúde, sem ninguém abrir um terminal. `/health` com readiness de verdade (testa MySQL, Redis, Garage e devolve `503` quando uma dependência crítica cai), `HEALTHCHECK` do Docker em todos os containers, `/metrics` pro Prometheus e um painel no Grafana (bônus). Veja a seção [Observabilidade](#observabilidade-health-checks-e-métricas-atividade-extra).
+
 ## Stack
 - **Backend:** FastAPI + SQLAlchemy + Alembic (catálogo e `auth-service`, cada um com sua própria migration history)
 - **Banco:** MySQL (driver `pymysql`) — a mesma instância remota, compartilhada entre os dois serviços
 - **Auth:** microsserviço próprio (`auth-service/`), cadastro/login com senha em hash `bcrypt`, sessão via JWT (assinatura verificada localmente pelo catálogo), papéis `usuario`/`admin`, recuperação de senha por e-mail com token de expiração de 30 minutos
+- **Observabilidade:** `/health` (liveness/readiness) + `HEALTHCHECK` do Docker; métricas com `prometheus-fastapi-instrumentator`, coletadas pelo Prometheus e exibidas no Grafana
 - **Object storage:** [Garage](https://garagehq.deuxfleurs.fr) (API S3, cliente `boto3`) — fotos de perfil; o banco guarda só a chave do objeto
 - **E-mail:** SMTP — Mailtrap em desenvolvimento (sandbox, não entrega de verdade), Brevo em produção
 - **Frontend:** Angular (standalone components), build servido como estático pelo próprio FastAPI em produção
@@ -233,6 +236,84 @@ Regra desde a atividade 2: credencial nunca vai pro repositório nem pra dentro 
 | **Descartáveis do smoke test** | Senha do MySQL temporário, `JWT_SECRET`, chaves do Garage | Gerados com `openssl rand` **dentro do run** e jogados fora com a stack. Não existem antes nem depois |
 | **Testes** | Valores obviamente falsos (`teste-jwt-secret-fake`...) | Definidos no [`tests/conftest.py`](tests/conftest.py). Os testes nunca leem o `.env` de quem roda |
 
+## Observabilidade (health checks e métricas, atividade extra)
+
+Um sistema que você não consegue enxergar por dentro é um sistema que você torce pra continuar funcionando. Dos três pilares da observabilidade, o projeto agora tem dois:
+
+| Pilar | Responde | Onde está |
+|---|---|---|
+| **Logs** | *o que aconteceu?* ("usuário X fez Y às Z") | Atividade 5: `log-service` + Redis Streams |
+| **Métricas** | *como está agora e pra onde está indo?* (req/min, latência, taxa de erro) | Esta atividade: `/metrics` + Prometheus + Grafana |
+| Traces | *por onde a requisição passou?* (o caminho entre serviços) | Fora do escopo. Seria OpenTelemetry |
+
+### `/health`: dois tipos de "estou bem"
+
+Cada serviço (catálogo, auth-service, log-service) tem dois endpoints, sem login, porque quem chama é o Docker, não um usuário:
+
+- **`GET /health/live`** (*liveness*): o processo está de pé e respondendo? Não testa mais nada, de propósito. Se isso falhar, reiniciar o container resolve.
+- **`GET /health`** (*readiness*): eu consigo **atender de verdade**? Testa cada dependência real e devolve **`503`** se uma **crítica** estiver fora. Nesse caso reiniciar não adianta (reiniciar não faz o banco voltar): o certo é parar de mandar tráfego.
+
+Um `/health` que sempre devolve `200` é pior que nenhum: o container parece "no ar" e fica devolvendo erro pra todo usuário, em silêncio. Por isso a resposta sempre lista cada checagem, com o tempo de cada uma:
+
+```json
+{"status": "degraded", "checagens": {
+  "mysql":        {"status": "ok",   "critica": true,  "ms": 297},
+  "auth-service": {"status": "ok",   "critica": false, "ms": 13},
+  "log-service":  {"status": "ok",   "critica": false, "ms": 12},
+  "garage":       {"status": "fail", "critica": false, "ms": 5, "erro": "StorageUnavailable"}}}
+```
+
+| Serviço | Dependência **crítica** (fora → `503`, `fail`) | Não crítica (fora → `200`, `degraded`) |
+|---|---|---|
+| Catálogo | MySQL (`SELECT 1`) | auth-service, log-service, Garage (`HEAD` no bucket) |
+| auth-service | MySQL (`SELECT 1`) | log-service |
+| log-service | Redis (`PING`) | — |
+
+- **Por que só o MySQL é crítico no catálogo:** sem o Garage, só as fotos param. O log-service já é *fire-and-forget* desde a atividade 5. Sem o auth-service, quem já tem token continua usando, porque o JWT é verificado localmente. Tirar o catálogo inteiro do ar por qualquer uma dessas derrubaria junto tudo o que ainda funciona.
+- **Sem falha em cascata:** quando a dependência é outro serviço, pergunta só o `/health/live` dele, nunca o `/health` completo. Senão uma queda do MySQL apareceria no health de todo mundo. Com o Redis fora, só o log-service fica `fail`; o catálogo continua `ok`.
+
+### `HEALTHCHECK` do Docker
+
+Todos os containers do `docker-compose.yml` (e do `docker-compose.portainer.yml`, de produção) têm `healthcheck`, então o `docker ps` e o Portainer mostram `(healthy)`/`(unhealthy)`:
+
+| Container | Checagem | Fica `unhealthy` quando |
+|---|---|---|
+| api, auth-service, log-service | `GET /health` via Python (`urllib`): as imagens *slim* não têm `curl`, e o `urlopen` já dá erro no `503` | uma dependência crítica cai |
+| redis | `redis-cli ping` | o Redis não responde |
+| garage | `/garage status`: a imagem não tem shell nem `curl`, só o binário | o nó não responde |
+| prometheus, grafana | `wget` no endpoint de saúde de cada um | idem |
+
+Checagem a cada 10–15s, e `unhealthy` só depois de **3 falhas seguidas** (~45s), pra uma oscilação de um segundo não virar alarme. Quando a dependência volta, a próxima checagem já devolve `healthy`. De quebra, o smoke test do CI usa `docker compose up --wait`, que agora espera **todos** os containers ficarem `healthy` antes de testar.
+
+### `/metrics` (Prometheus)
+
+Os três serviços são instrumentados com `prometheus-fastapi-instrumentator`:
+
+- `http_requests_total{handler, method, status}`: requisições por **rota** e **código de status**. A rota entra como template (`/profiles/{usuario_id}`), nunca com o id de verdade, senão cada usuário viraria uma série nova. O status é o exato (`403`, `415`), não agrupado em `4xx`.
+- `http_request_duration_seconds`: **histograma de latência** por rota, com faixas de 10ms a 5s. As faixas padrão (0,1s, 0,5s, 1s) davam um p95 inútil, já que só o round-trip até o MySQL remoto leva de 0,3 a 0,7s.
+- O `/health` fica **fora** da contagem: o `HEALTHCHECK` chama a cada 15s e inflaria req/min com tráfego que não é de usuário.
+
+**O `/metrics` fica numa porta interna separada (`9100`), não publicada.** O catálogo é o único serviço público, e um `/metrics` na porta dele ficaria aberto na internet mostrando rotas, volume de tráfego e taxa de erro. Quem lê é o Prometheus, de dentro da rede do Docker (`api:9100`, `auth-service:9100`, `log-service:9100`). Em produção, `https://leonardo-oliveira-isw055.lapps.studio/metrics` devolve `404`.
+
+### Prometheus + Grafana (bônus)
+
+`docker compose up` sobe também:
+
+- **Prometheus** ([`observabilidade/prometheus/prometheus.yml`](observabilidade/prometheus/prometheus.yml)): coleta os 3 serviços a cada 15s e guarda 7 dias. Os alvos ficam em http://localhost:9090/targets.
+- **Grafana** (http://localhost:3000): fonte de dados e painel vêm **prontos do repositório** ([`observabilidade/grafana/`](observabilidade/grafana/)), sem configurar nada pela interface. O painel abre sem login, só leitura; editar exige o admin, com a senha vinda do `.env` (`GRAFANA_ADMIN_PASSWORD`).
+
+As duas portas ficam presas no `127.0.0.1` da máquina: não abrem pra rede. O painel *API Filmes — saúde e métricas* tem:
+
+| Painel | Query (PromQL) |
+|---|---|
+| Serviços no ar | `up` |
+| Requisições por minuto | `sum by (job) (rate(http_requests_total[$__rate_interval])) * 60` |
+| Taxa de erro (4xx+5xx e só 5xx) | `rate` dos `status=~"4..\|5.."` ÷ `rate` do total, por serviço |
+| Latência p95 (por serviço e por rota do catálogo) | `histogram_quantile(0.95, sum by (job, le) (rate(http_request_duration_seconds_bucket[...])))` |
+| Requisições por rota e status | `sum by (job, handler, method, status) (increase(http_requests_total[$__range]))` |
+
+**Só no compose local, não em produção:** o servidor da disciplina expõe só o domínio do catálogo, então o Grafana não teria como ser acessado de fora, e dois containers a mais pesariam no servidor compartilhado. Em produção ficam os `/health` e os `HEALTHCHECK`, que é o que o Portainer mostra.
+
 ## Recuperação de senha (esqueci minha senha)
 
 1. `POST /auth/forgot-password` com o e-mail — sempre responde a mesma mensagem genérica, exista ou não o e-mail cadastrado (evita que alguém descubra quais e-mails têm conta testando um por um).
@@ -288,6 +369,9 @@ S3_ACCESS_KEY=GK...                      # echo "GK$(openssl rand -hex 16)"
 S3_SECRET_KEY=...                        # openssl rand -hex 32
 S3_ENDPOINT_URL=http://localhost:3900    # só pra rodar fora do Docker
 S3_PUBLIC_URL=http://localhost:8000      # o endereço pelo qual o site é acessado
+
+# Grafana (observabilidade) — openssl rand -hex 16
+GRAFANA_ADMIN_PASSWORD=...
 ```
 
 ### 4. Rodar as migrations (catálogo e auth-service)
@@ -344,7 +428,7 @@ cd .. && .venv/bin/uvicorn app.main:app
 ```bash
 docker compose up --build
 ```
-- Sobe os cinco containers na mesma rede (`catalog-net`): `api`, `auth-service`, `log-service`, `redis` e `garage`. Só o `api` publica porta pro host (`:8000`). O `garage` cria sozinho a chave de acesso e o bucket no primeiro boot, a partir de `S3_ACCESS_KEY`/`S3_SECRET_KEY`/`S3_BUCKET` do `.env`.
+- Sobe os containers na mesma rede (`catalog-net`): `api`, `auth-service`, `log-service`, `redis`, `garage`, e os de observabilidade, `prometheus` e `grafana`. Só o `api` publica porta pra rede (`:8000`); Grafana (`:3000`) e Prometheus (`:9090`) ficam presos no `127.0.0.1`. O `garage` cria sozinho a chave de acesso e o bucket no primeiro boot, a partir de `S3_ACCESS_KEY`/`S3_SECRET_KEY`/`S3_BUCKET` do `.env`.
 - Rodar as migrations do catálogo e do `auth-service` (perfil `tools`, não sobe com o `up` normal — o `log-service` não tem migration, não guarda nada em SQL):
   ```bash
   docker compose run --rm migrate
@@ -352,7 +436,7 @@ docker compose up --build
   ```
 - Confirmar que `auth-service`, `log-service`, `redis` e `garage` não têm porta publicada:
   ```bash
-  docker compose ps   # a coluna PORTS só deve vir preenchida pro serviço api
+  docker compose ps   # só o api publica pra rede (0.0.0.0:8000); prometheus e grafana só em 127.0.0.1
   ```
 
 ### 9. Rodar os testes
@@ -397,6 +481,8 @@ Os testes do `log-service` usam `fakeredis` (Redis em memória, sem precisar de 
 | DELETE | `/admin/favorites/{id}` | sim (admin) | Remove o favorito de qualquer usuário |
 | GET | `/auth/admin/users` | sim (admin) | Proxy pro `auth-service` — lista todos os usuários cadastrados |
 | PATCH | `/auth/admin/users/{id}/role` | sim (admin) | Proxy pro `auth-service` — promove/rebaixa o papel de um usuário |
+| GET | `/health` | não | Readiness: testa MySQL, auth-service, log-service e Garage. `503` se o MySQL estiver fora ([Observabilidade](#observabilidade-health-checks-e-métricas-atividade-extra)) |
+| GET | `/health/live` | não | Liveness: só confirma que o processo responde |
 | POST | `/auth/logout` | sim | Não invalida nada no servidor (JWT é stateless) — só registra o evento de auditoria |
 | GET | `/admin/logs` | sim (admin) | Proxy pro `log-service` — últimos N eventos de auditoria (atividade 5), mais recente primeiro |
 | GET | `/profiles/{id}` | sim | Perfil de qualquer usuário: nome, bio, `foto_url` (pré-assinada, 15 min), favoritos, `eh_meu` |
@@ -497,6 +583,7 @@ garage/                 # Dockerfile + garage.toml do object storage (atividade 
 scripts/smoke-test.sh   # smoke test da stack inteira de pé (usado pelo CI)
 docker-compose.yml      # os cinco serviços (api, auth-service, log-service, redis, garage) + rede catalog-net
 docker-compose.ci.yml   # só pro CI: acrescenta um MySQL descartável pro smoke test
+observabilidade/        # Prometheus (alvos de coleta) e Grafana (fonte de dados + painel provisionados)
 docker-compose.portainer.yml  # stack de produção; as tags sha-xxxxxxx são atualizadas pelo pipeline
 docs/openapi/           # spec OpenAPI exportada de auth-service e log-service (sem porta publicada,
                         #   Swagger UI deles só dá pra ver local — ver "Documentação da API")
@@ -515,6 +602,26 @@ docs/openapi/           # spec OpenAPI exportada de auth-service e log-service (
 - `log-service` não tem tabela de usuários própria — decodifica o mesmo JWT localmente (mesmo `JWT_SECRET`) pra saber quem é admin, igual o catálogo faz pro resto do RBAC.
 
 ## Evidências
+
+### Atividade extra — Observabilidade: health checks e métricas
+
+**1. `docker ps` (Portainer, produção) com tudo no ar:** todos os containers `healthy`.
+
+![Containers da stack no Portainer, todos healthy](docs/evidencias/obs-docker-ps-healthy.png)
+
+**2. Redis derrubado, e o log-service vira `unhealthy` sozinho:** o Redis foi parado (`exited - code 0`) e ninguém tocou no log-service. Depois de 3 checagens seguidas com `503` no `/health` dele, o Docker o marcou como `unhealthy`. Catálogo, auth-service e Garage continuam `healthy`, porque o Redis não é dependência deles. Com o Redis de volta, ele volta a `healthy` na checagem seguinte.
+
+![Com o Redis parado, só o log-service aparece unhealthy](docs/evidencias/obs-docker-ps-redis-fora.png)
+
+**3. Painel no Grafana** (bônus), com a stack local sob tráfego real (smoke test em laço):
+
+![Painel do Grafana: serviços no ar, requisições por minuto, taxa de erro e latência p95](docs/evidencias/obs-grafana-painel.png)
+
+Req/min por serviço; taxa de erro de ~43% no catálogo, sendo ~14% de 5xx: neste ambiente de teste a chave do TMDB era falsa, então o `/movies` devolvia `502`, o que é justamente o que o painel de erro existe pra mostrar. p95 de ~240ms no catálogo e no auth-service (o `bcrypt` do login é lento de propósito) e ~9ms no log-service.
+
+**4. Requisições por serviço, rota, método e status**, a mesma informação do `/metrics` cru, somada no Grafana:
+
+![Tabela do Grafana com requisições por serviço, rota, método e código de status](docs/evidencias/obs-grafana-rotas.png)
 
 ### Atividade extra — CI/CD: pipeline verde e produção rodando a tag do commit
 
