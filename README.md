@@ -1,5 +1,7 @@
 # Catálogo de Filmes — Tom Hanks (multi-tenant)
 
+[![CI/CD](https://github.com/leonardoricci-tsi/api_filme_/actions/workflows/ci.yml/badge.svg)](https://github.com/leonardoricci-tsi/api_filme_/actions/workflows/ci.yml)
+
 > Atividade da disciplina, proposta pelo professor [@siriani](https://github.com/siriani).
 
 API FastAPI que lista filmes do Tom Hanks (dados sempre ao vivo da TMDB, nunca persistidos) e permite que cada usuário cadastrado no app favorite e comente filmes, com isolamento total de dados entre usuários proposto pelo professor @siriani.
@@ -7,6 +9,8 @@ API FastAPI que lista filmes do Tom Hanks (dados sempre ao vivo da TMDB, nunca p
 **Atividade 3 — serviços desacoplados:** a autenticação (login, cadastro, papéis de usuário e recuperação de senha) foi extraída do catálogo para um microsserviço próprio, o `auth-service/`, que só é alcançável pela rede interna do Docker. O catálogo continua sendo o único ponto de entrada público. Veja a seção [Arquitetura](#arquitetura) e as [evidências](#evidências) mais abaixo.
 
 **Atividade 6 — armazenamento de objetos:** o catálogo virou uma rede social simples: cada usuário tem uma página de perfil com foto, bio e os filmes favoritados. A foto **não vai pro banco** — vai pra um object storage (Garage, compatível com S3), e o MySQL guarda só a chave do objeto. Veja a seção [Perfil e fotos](#perfil-e-fotos-object-storage-atividade-6).
+
+**Atividade extra — CI/CD com GitHub Actions:** deploy sem clicar em nada. A cada `git push`, o GitHub Actions roda os testes, builda as imagens e sobe a stack inteira pra um smoke test; se tudo passou, publica as imagens no GHCR com a tag do commit (`sha-xxxxxxx`) e o Portainer coloca essa versão no ar sozinho. Veja a seção [CI/CD](#cicd-github-actions-atividade-extra).
 
 ## Stack
 - **Backend:** FastAPI + SQLAlchemy + Alembic (catálogo e `auth-service`, cada um com sua própria migration history)
@@ -169,6 +173,66 @@ O catálogo é dono do perfil (tabela `perfis`: `usuario_id`, `bio`, `foto_key`)
 ### Por que Garage e não MinIO
 O enunciado sugere MinIO, mas a edição community dele foi arquivada e perdeu recursos (console, imagens Docker publicadas). O professor liberou a troca. O Garage fala a mesma API S3, então o código do catálogo é o de qualquer S3 (`boto3`), e trocar de volta seria só configuração. A partir da v2.3, `garage server --single-node --default-bucket` monta o cluster de um nó e cria a chave de acesso e o bucket a partir de variáveis de ambiente, sem passo manual de `garage layout`/`garage key`. O `garage/garage.toml` não tem segredo nenhum (o `rpc_secret` vem de `GARAGE_RPC_SECRET`) e vai dentro de uma imagem própria (`garage/Dockerfile`), porque no Portainer não há repositório pra montar o arquivo como volume.
 
+## CI/CD (GitHub Actions, atividade extra)
+
+Até a atividade 6, todo deploy era manual: buildar a imagem no Mac, publicar no Docker Hub, trocar a tag no Portainer e torcer. Agora o caminho inteiro é um workflow, [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Cada deploy vira uma execução registrada, amarrada a um commit, que qualquer um pode reler ou refazer.
+
+- **CI (Continuous Integration):** a cada push ou pull request, confere se o código ainda funciona. Se não funcionar, o commit fica marcado como quebrado (❌) antes de chegar em qualquer ambiente.
+- **CD (Continuous Deployment):** se o CI passou e o push é na `main`, empacota, publica e põe no ar, sem clique.
+
+### O pipeline
+
+```
+git push ──▶ Testes (catálogo, log-service) ──┐
+             Build das 4 imagens Docker ──────┤──▶ Smoke test ──▶ Publicar no GHCR ──▶ Deploy ──▶ Portainer
+                                              │   (stack de pé     sha-xxxxxxx         (commit do    puxa do Git
+             qualquer ❌ aqui para tudo ◀─────┘    de verdade)      + latest            robô)         e sobe a tag
+```
+
+| Job | O que faz | Quebra o pipeline se... |
+|---|---|---|
+| Testes — catálogo | `pytest`: os 90 testes (SQLite em memória + mocks) | qualquer teste falhar |
+| Testes — log-service | `pytest` com `fakeredis` | idem |
+| Build — api / auth-service / log-service / garage | `docker build` das 4 imagens. A do catálogo também compila o Angular | um Dockerfile ou o front não compilar |
+| Smoke test — stack de pé | Sobe a stack **inteira** com `docker compose` e um MySQL descartável, roda as migrations do zero e executa [`scripts/smoke-test.sh`](scripts/smoke-test.sh): cadastro, **login (200; senha errada, 401)**, upload de foto pro Garage, URL pré-assinada, `403` no perfil alheio, eventos no log de auditoria. Sem mock nenhum | qualquer verificação falhar |
+| Publicar — ×4 | Só se **todos** os jobs acima passaram e é push na `main`: publica as 4 imagens no GHCR | — |
+| Deploy | Reescreve as tags do `docker-compose.portainer.yml` pra `sha-<commit>` e faz um commit automático `deploy: sha-xxxxxxx [skip ci]` | — |
+
+Pull request e push em outra branch rodam só a parte de CI: nada é publicado nem vai pro ar.
+
+### Tag rastreável
+
+As imagens ficam no **GitHub Container Registry**, ligadas a este repositório: `ghcr.io/leonardoricci-tsi/api-filmes`, `api-filmes-auth`, `api-filmes-log` e `api-filmes-garage`. Cada publicação recebe duas tags:
+
+- `sha-xxxxxxx`: os 7 primeiros caracteres do commit. **É essa que roda em produção**, e com ela dá pra saber exatamente qual código está no ar (`git show xxxxxxx`).
+- `latest`: a mais recente, por conveniência. Produção nunca usa.
+
+**Rollback** é apontar pra uma tag anterior: reverter o commit `deploy: sha-...` (ou editar as tags pra um `sha-` antigo) e dar push. O Portainer volta pra aquela versão do mesmo jeito que subiu a nova.
+
+### Deploy automático (GitOps)
+
+O workflow **nunca acessa o servidor**. Ele só registra no repositório *qual* versão deve estar no ar, e o servidor segue o repositório:
+
+1. O job **Deploy** troca as tags do [`docker-compose.portainer.yml`](docker-compose.portainer.yml) pra `sha-<commit>` e faz o commit automático, como `github-actions[bot]`. Esse commit não dispara outro CI: push feito com o `GITHUB_TOKEN` não gera run novo, e o `[skip ci]` reforça.
+2. A stack no Portainer (`api-tom-hanks-leonardo`) é criada **a partir deste repositório** (*Build method: Repository*, compose `docker-compose.portainer.yml`, branch `main`) com **GitOps updates** ligado: o Portainer consulta o repositório periodicamente (*polling*), percebe o commit do robô e recria os containers com as tags novas.
+3. Opcional: se o secret `PORTAINER_WEBHOOK_URL` estiver configurado no GitHub, o job também chama o webhook da stack, e o deploy acontece na hora, sem esperar o próximo polling.
+
+**Pendências / limites conhecidos:**
+- Entre o fim do pipeline e o container novo no ar, passa até um intervalo de polling do Portainer. Com o webhook configurado, esse atraso some.
+- **Migrations não rodam no pipeline de produção.** O smoke test prova, a cada push, que elas montam o banco do zero, mas aplicá-las no MySQL de produção continua manual (`docker compose run --rm migrate` / `migrate-auth`). Automatizar isso exigiria dar ao GitHub acesso ao banco de produção, que é justamente o que o GitOps evita.
+
+### Segredos: onde cada um vive (sem revelar nenhum)
+
+Regra desde a atividade 2: credencial nunca vai pro repositório nem pra dentro da imagem. Nenhum YAML, Dockerfile ou imagem deste repositório tem senha, chave ou token (o `.env` está no `.gitignore` e no `.dockerignore` de cada serviço).
+
+| Onde | Quais | Como entram |
+|---|---|---|
+| **Portainer** (variáveis de ambiente da stack) | `DATABASE_URL`, `JWT_SECRET`, `TMDB_API_KEY`, `SMTP_USER`/`SMTP_PASSWORD` (e demais `SMTP_*`), `GARAGE_RPC_SECRET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_PUBLIC_URL`, `CATALOG_PUBLIC_URL` | Cadastradas na tela da stack; o `docker-compose.portainer.yml` só referencia `${NOME}` |
+| **GitHub Secrets** | `PORTAINER_WEBHOOK_URL` (opcional: quem tem essa URL força um redeploy) | *Settings → Secrets and variables → Actions*, lido como `${{ secrets.PORTAINER_WEBHOOK_URL }}` |
+| **Automático, por run** | `GITHUB_TOKEN`, que publica no GHCR e faz o commit de deploy | Criado pelo próprio Actions a cada run, expira no fim dele e vale só pra este repositório. Não existe senha de registry guardada em lugar nenhum |
+| **Descartáveis do smoke test** | Senha do MySQL temporário, `JWT_SECRET`, chaves do Garage | Gerados com `openssl rand` **dentro do run** e jogados fora com a stack. Não existem antes nem depois |
+| **Testes** | Valores obviamente falsos (`teste-jwt-secret-fake`...) | Definidos no [`tests/conftest.py`](tests/conftest.py). Os testes nunca leem o `.env` de quem roda |
+
 ## Recuperação de senha (esqueci minha senha)
 
 1. `POST /auth/forgot-password` com o e-mail — sempre responde a mesma mensagem genérica, exista ou não o e-mail cadastrado (evita que alguém descubra quais e-mails têm conta testando um por um).
@@ -298,6 +362,13 @@ cd log-service && .venv/bin/python -m pytest -v  # log-service — .venv própri
 ```
 Os testes do catálogo usam SQLite em memória (não tocam no MySQL configurado em `.env`), mockam as chamadas à TMDB e mockam as respostas do `auth-service`/`log-service` (`respx`) — rodam offline. Incluem os testes críticos de isolamento entre usuários: um usuário A não consegue ler, editar ou deletar um favorito/comentário do usuário B mesmo sabendo o ID do recurso (a API responde `404`, nunca `403`, para não vazar a existência do recurso).
 
+A suíte do catálogo não depende do `.env` de quem roda: o `tests/conftest.py` define o próprio ambiente antes de importar o app (segredos falsos, serviços internos numa porta local fechada). Por isso ela roda igual na sua máquina e no GitHub Actions, onde não existe `.env`.
+
+Smoke test da stack inteira (o mesmo do CI), com a stack de pé via `docker compose up`:
+```bash
+scripts/smoke-test.sh http://localhost:8000
+```
+
 Os testes do `log-service` usam `fakeredis` (Redis em memória, sem precisar de um Redis de verdade rodando) — têm seu próprio `.venv` e `pytest.ini`, por isso rodam à parte (cada serviço é um projeto Python independente).
 
 ## Endpoints
@@ -422,7 +493,11 @@ frontend/       # projeto Angular (standalone components)
     features/   # telas: auth/login, auth/register, auth/forgot-password, auth/reset-password, catalog, favorites,
                 #   comments, profile (perfil com foto, bio e favoritos)
 garage/                 # Dockerfile + garage.toml do object storage (atividade 6), sem segredos
+.github/workflows/ci.yml  # pipeline de CI/CD: testes, build, smoke test, publicação no GHCR e deploy
+scripts/smoke-test.sh   # smoke test da stack inteira de pé (usado pelo CI)
 docker-compose.yml      # os cinco serviços (api, auth-service, log-service, redis, garage) + rede catalog-net
+docker-compose.ci.yml   # só pro CI: acrescenta um MySQL descartável pro smoke test
+docker-compose.portainer.yml  # stack de produção; as tags sha-xxxxxxx são atualizadas pelo pipeline
 docs/openapi/           # spec OpenAPI exportada de auth-service e log-service (sem porta publicada,
                         #   Swagger UI deles só dá pra ver local — ver "Documentação da API")
 ```
@@ -440,6 +515,14 @@ docs/openapi/           # spec OpenAPI exportada de auth-service e log-service (
 - `log-service` não tem tabela de usuários própria — decodifica o mesmo JWT localmente (mesmo `JWT_SECRET`) pra saber quem é admin, igual o catálogo faz pro resto do RBAC.
 
 ## Evidências
+
+### Atividade extra — CI/CD: pipeline verde e produção rodando a tag do commit
+
+**1. Execução real do workflow, toda verde:** [Actions → CI/CD → run 36759550355](https://github.com/leonardoricci-tsi/api_filme_/actions/runs/36759550355) (commit `e424517`). Os 12 jobs passaram: 2 de testes, 4 de build, o smoke test, 4 de publicação no GHCR e o deploy, que gerou o commit automático `deploy: sha-e424517 [skip ci]`.
+
+**2. Produção rodando exatamente a imagem que esse run publicou:** containers da stack `api-tom-hanks-leonardo` no Portainer com as imagens `ghcr.io/leonardoricci-tsi/...:sha-e424517`, a tag do commit, não a `latest`:
+
+![Containers da stack no Portainer rodando as imagens do GHCR com a tag sha-e424517](docs/evidencias/cicd-container-tag-commit.png)
 
 ### Atividade 6 — Perfil com foto no object storage
 
