@@ -1,0 +1,13 @@
+# Carrega os painéis versionados em observabilidade/grafana/dashboards/
+# (montado em /var/lib/grafana/dashboards) — o painel é código, vive no
+# repositório, e não se perde se o container for recriado.
+apiVersion: 1
+
+providers:
+  - name: api-filmes
+    folder: API Filmes
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

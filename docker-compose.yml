@@ -6,6 +6,7 @@ volumes:
   redis-data:
   garage-meta:
   garage-data:
+  prometheus-data:
 
 services:
   api:
@@ -156,3 +157,58 @@ services:
     volumes:
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data
+
+  # Observabilidade (atividade extra): o Prometheus coleta o /metrics de
+  # cada serviço (porta interna 9100) a cada 15s e guarda a série temporal
+  # por 7 dias. Porta só no localhost do host (127.0.0.1) — pra olhar os
+  # alvos em http://localhost:9090/targets, sem abrir pra rede.
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./observabilidade/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9090/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - catalog-net
+    depends_on:
+      - api
+      - auth-service
+      - log-service
+
+  # Painel em http://localhost:3000 (só no localhost do host). Fonte de dados
+  # e painel vêm prontos do repositório (observabilidade/grafana/), sem
+  # clicar em nada. Qualquer um vê o painel sem login (papel Viewer, só
+  # leitura); editar exige o admin, com a senha vinda do .env — nunca aqui.
+  grafana:
+    image: grafana/grafana:13.2.3
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?defina GRAFANA_ADMIN_PASSWORD no .env}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/api-filmes.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./observabilidade/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observabilidade/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - catalog-net
+    depends_on:
+      - prometheus
