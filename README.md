@@ -3,6 +3,8 @@
 [![CI/CD](https://github.com/leonardoricci-tsi/api_filme_/actions/workflows/ci.yml/badge.svg)](https://github.com/leonardoricci-tsi/api_filme_/actions/workflows/ci.yml)
 
 > Atividade da disciplina, proposta pelo professor [@siriani](https://github.com/siriani).
+>
+> **Relatório da P1 (ISW055):** [docs/P1_ISW055_Leonardo_Oliveira_assinado.pdf](docs/P1_ISW055_Leonardo_Oliveira_assinado.pdf) (assinado digitalmente via gov.br) — fonte em Typst: [docs/P1_ISW055_Leonardo_Oliveira.typ](docs/P1_ISW055_Leonardo_Oliveira.typ).
 
 API FastAPI que lista filmes do Tom Hanks (dados sempre ao vivo da TMDB, nunca persistidos) e permite que cada usuário cadastrado no app favorite e comente filmes, com isolamento total de dados entre usuários proposto pelo professor @siriani.
 
