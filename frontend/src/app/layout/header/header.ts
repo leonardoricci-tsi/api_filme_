@@ -3,6 +3,7 @@ import { Component, OnInit, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 
 import { AuthService } from '../../core/services/auth.service';
+import { PremiumService } from '../../core/services/premium.service';
 import { ProfileService } from '../../core/services/profile.service';
 
 const NOME_PAPEL: Record<string, string> = {
@@ -25,6 +26,7 @@ export class Header implements OnInit {
   constructor(
     readonly authService: AuthService,
     readonly profileService: ProfileService,
+    readonly premiumService: PremiumService,
     private readonly router: Router,
   ) {}
 
@@ -34,6 +36,7 @@ export class Header implements OnInit {
     const id = this.authService.usuarioId();
     if (id !== null) {
       this.profileService.carregarMinhaFoto(id);
+      this.premiumService.carregarStatus().subscribe({ error: () => this.premiumService.limpar() });
     }
   }
 
@@ -54,6 +57,7 @@ export class Header implements OnInit {
   sair(): void {
     this.authService.logout();
     this.profileService.limparMinhaFoto();
+    this.premiumService.limpar();
     this.menuAberto.set(false);
     this.router.navigate(['/']);
   }

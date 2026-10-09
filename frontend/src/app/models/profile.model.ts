@@ -8,5 +8,7 @@ export interface Profile {
   // que veio na última resposta.
   foto_url: string | null;
   eh_meu: boolean;
+  // Plano pago ativo (atividade 7): nerd / stalker_do_tomhanks, ou null.
+  plano: string | null;
   favoritos: Favorite[];
 }

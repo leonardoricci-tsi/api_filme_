@@ -18,10 +18,11 @@
     @if (authService.isAdmin()) {
       <a routerLink="/app/admin" routerLinkActive="ativo">Admin</a>
     }
+    <a routerLink="/app/planos" routerLinkActive="ativo" class="link-premium">★ Planos</a>
   </nav>
 
   <div class="perfil">
-    <button class="avatar" (click)="toggleMenu()" [attr.aria-label]="'Menu de ' + (authService.usuario()?.nome ?? 'usuário')">
+    <button class="avatar" [class.premium]="premiumService.status()?.premium" (click)="toggleMenu()" [attr.aria-label]="'Menu de ' + (authService.usuario()?.nome ?? 'usuário')">
       @if (profileService.minhaFotoUrl(); as foto) {
         <img [src]="foto" alt="" />
       } @else {

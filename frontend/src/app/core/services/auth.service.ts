@@ -90,6 +90,17 @@ export class AuthService {
     );
   }
 
+  // Token novo com o papel atual do banco (atividade 7): o papel viaja
+  // dentro do JWT, então depois que um plano pago troca o papel, o token
+  // guardado ainda diz o papel velho — sem isso, só relogando.
+  renovarToken(): Observable<UsuarioLogado> {
+    return this.http.post<TokenResponse>('/auth/refresh', {}).pipe(
+      tap((resposta) => this._token.set(resposta.access_token)),
+      tap((resposta) => localStorage.setItem(TOKEN_KEY, resposta.access_token)),
+      switchMap(() => this.carregarPerfil()),
+    );
+  }
+
   register(payload: RegisterPayload): Observable<UsuarioLogado> {
     return this.http.post<TokenResponse>('/auth/register', payload).pipe(
       tap((resposta) => this._token.set(resposta.access_token)),

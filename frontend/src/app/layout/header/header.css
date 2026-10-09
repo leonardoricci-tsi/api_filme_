@@ -143,3 +143,18 @@
 .btn-sair:hover {
   background: #454f6b;
 }
+
+/* Planos pagos (atividade 7): dourado, a cor de destaque do site. */
+.nav a.link-premium {
+  margin-left: auto;
+  color: #d9a441;
+  font-weight: 600;
+}
+
+.nav a.link-premium.ativo {
+  border-bottom-color: #d9a441;
+}
+
+.avatar.premium {
+  box-shadow: 0 0 0 2px #1a1f2b, 0 0 0 4px #d9a441;
+}

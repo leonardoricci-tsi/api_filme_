@@ -104,3 +104,39 @@ h1 {
   height: 2.6rem;
   width: auto;
 }
+
+.aviso-limite {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.2rem;
+  border-radius: 8px;
+  background: rgba(217, 164, 65, 0.12);
+  border: 1px solid #d9a441;
+  color: #f0c46c;
+  font-size: 0.9rem;
+}
+
+.aviso-limite span {
+  flex: 1;
+  min-width: 200px;
+}
+
+.aviso-limite a {
+  color: #10131a;
+  background: #d9a441;
+  padding: 0.35rem 0.8rem;
+  border-radius: 6px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.aviso-limite button {
+  background: none;
+  border: none;
+  color: #f0c46c;
+  font-size: 1.2rem;
+  cursor: pointer;
+}

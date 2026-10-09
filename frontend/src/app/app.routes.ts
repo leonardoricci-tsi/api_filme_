@@ -46,6 +46,12 @@ export const routes: Routes = [
         loadComponent: () => import('./features/profile/profile').then((m) => m.Profile),
       },
       {
+        // Planos pagos (atividade 7). Também é pra cá que o Stripe devolve
+        // o navegador depois do checkout (?checkout=sucesso|cancelado).
+        path: 'planos',
+        loadComponent: () => import('./features/planos/planos').then((m) => m.Planos),
+      },
+      {
         path: 'favoritos',
         loadComponent: () => import('./features/favorites/favorites').then((m) => m.Favorites),
       },

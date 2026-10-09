@@ -8,6 +8,7 @@ import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { ProfileService } from '../../core/services/profile.service';
 import { Profile as Perfil } from '../../models/profile.model';
+import { PLANOS } from '../planos/planos';
 
 // Espelham os limites do backend (app/services/imagem.py) só pra avisar
 // antes de gastar um upload — quem recusa de verdade é o servidor
@@ -77,6 +78,10 @@ export class Profile implements OnInit {
 
   get iniciais(): string {
     return (this.perfil()?.nome ?? '?').trim().charAt(0).toUpperCase();
+  }
+
+  nomePlano(papel: string): string {
+    return PLANOS.find((p) => p.papel === papel)?.nome ?? papel;
   }
 
   posterUrl(posterPath: string | null): string | null {

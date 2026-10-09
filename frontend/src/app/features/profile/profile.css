@@ -175,3 +175,15 @@ figcaption {
   font-size: 0.8rem;
   color: #a8afc2;
 }
+
+.selo-premium {
+  margin-left: 0.5rem;
+  vertical-align: middle;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #d9a441;
+  color: #10131a;
+}

@@ -1,0 +1,75 @@
+@switch (retorno()) {
+  @case ('confirmando') {
+    <div class="aviso">
+      <span class="spinner" aria-hidden="true"></span>
+      Pagamento recebido pelo Stripe. Aguardando a confirmação chegar…
+    </div>
+  }
+  @case ('confirmado') {
+    <div class="aviso sucesso">★ Pagamento confirmado! Agora você está no plano {{ nomePlanoAtual }}.</div>
+  }
+  @case ('demorou') {
+    <div class="aviso alerta">
+      A confirmação do pagamento ainda não chegou. Ela pode levar alguns instantes — recarregue a
+      página daqui a pouco.
+    </div>
+  }
+  @case ('cancelado') {
+    <div class="aviso">Pagamento cancelado. Nada foi cobrado.</div>
+  }
+}
+
+<h1>Escolha o seu nível de fã</h1>
+<p class="subtitulo">
+  Seu plano atual: <strong>{{ nomePlanoAtual }}</strong>. Quanto maior a obsessão, maior o plano.
+</p>
+
+<div class="grade-planos">
+  @for (plano of planos; track plano.papel) {
+    @let estado = situacao(plano);
+    <div class="plano-card" [class.plano-destaque]="plano.destaque" [class.plano-atual]="estado === 'atual'">
+      @if (estado === 'atual') {
+        <span class="plano-selo">Seu plano</span>
+      } @else if (plano.destaque) {
+        <span class="plano-selo">Mais popular</span>
+      }
+      <span class="plano-icone">{{ plano.icone }}</span>
+      <h3>{{ plano.nome }}</h3>
+      <p class="plano-preco">{{ plano.preco }}<span class="plano-periodo">{{ plano.periodo }}</span></p>
+      <p class="plano-descricao">{{ plano.descricao }}</p>
+      <ul class="plano-lista">
+        @for (beneficio of plano.beneficios; track beneficio) {
+          <li>{{ beneficio }}</li>
+        }
+      </ul>
+
+      @switch (estado) {
+        @case ('atual') {
+          <button class="btn-plano btn-secundario" disabled>Plano atual</button>
+        }
+        @case ('incluso') {
+          <button class="btn-plano btn-secundario" disabled>Incluso no seu plano</button>
+        }
+        @default {
+          <button
+            class="btn-plano"
+            [class.btn-primario]="plano.destaque"
+            [class.btn-secundario]="!plano.destaque"
+            [disabled]="abrindo() !== null || retorno() === 'confirmando'"
+            (click)="assinar(plano)"
+          >
+            {{ abrindo() === plano.papel ? 'Abrindo pagamento…' : 'Assinar ' + plano.nome }}
+          </button>
+        }
+      }
+    </div>
+  }
+</div>
+
+@if (erro()) {
+  <p class="erro">{{ erro() }}</p>
+}
+<p class="nota">
+  O pagamento é feito na página segura do Stripe — este site nunca vê o número do seu cartão.
+  Ambiente de teste: nenhuma cobrança real.
+</p>

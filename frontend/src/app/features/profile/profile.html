@@ -28,7 +28,12 @@
     </div>
 
     <div class="info">
-      <h1>{{ p.nome }}</h1>
+      <h1>
+        {{ p.nome }}
+        @if (p.plano) {
+          <span class="selo-premium" title="Assinante de um plano pago">★ {{ nomePlano(p.plano) }}</span>
+        }
+      </h1>
 
       @if (editandoBio()) {
         <textarea

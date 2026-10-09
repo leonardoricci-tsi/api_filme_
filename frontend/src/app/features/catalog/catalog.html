@@ -18,6 +18,14 @@
 
 <h1>Filmes com Tom Hanks</h1>
 
+@if (avisoLimite()) {
+  <div class="aviso-limite">
+    <span>★ {{ avisoLimite() }}. Favoritar é do plano Nerd pra cima.</span>
+    <a routerLink="/app/planos">Ver planos</a>
+    <button type="button" aria-label="Fechar aviso" (click)="avisoLimite.set('')">×</button>
+  </div>
+}
+
 @if (erro()) {
   <p class="erro">{{ erro() }}</p>
 } @else if (carregando()) {

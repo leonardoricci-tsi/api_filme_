@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 
 import { FavoritesService } from '../../core/services/favorites.service';
 import { MoviesService } from '../../core/services/movies.service';
@@ -11,7 +13,7 @@ import { MovieCard } from '../../shared/movie-card/movie-card';
 @Component({
   selector: 'app-catalog',
   standalone: true,
-  imports: [CommonModule, FormsModule, MovieCard],
+  imports: [CommonModule, FormsModule, RouterLink, MovieCard],
   templateUrl: './catalog.html',
   styleUrl: './catalog.css',
 })
@@ -20,6 +22,9 @@ export class Catalog implements OnInit, OnDestroy {
   favoritos = signal<Favorite[]>([]);
   carregando = signal(true);
   erro = signal('');
+  // Mensagem do 403 de quem está no plano gratuito e tenta favoritar
+  // (favoritar é do plano Nerd pra cima — atividade 7).
+  avisoLimite = signal('');
 
   busca = signal('');
   private buscaTimeout?: ReturnType<typeof setTimeout>;
@@ -108,7 +113,14 @@ export class Catalog implements OnInit, OnDestroy {
       })
       .subscribe({
         next: (favorito) => this.favoritos.update((atual) => [favorito, ...atual]),
-        error: () => this.carregarFavoritos(),
+        error: (erro: HttpErrorResponse) => {
+          // 403 aqui é papel abaixo de nerd — quem decide é o backend (pelo
+          // papel do JWT), a tela só mostra o motivo e o caminho pros planos.
+          if (erro.status === 403 && typeof erro.error?.detail === 'string') {
+            this.avisoLimite.set(erro.error.detail);
+          }
+          this.carregarFavoritos();
+        },
       });
   }
 }
