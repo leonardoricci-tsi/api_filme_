@@ -1,26 +1,33 @@
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import UsuarioAutenticado, get_current_user
+from app.auth.dependencies import NIVEL_PAPEL, UsuarioAutenticado, get_current_user
 from app.database import get_db
 from app.models import Assinatura
 from app.openapi_responses import (
     RESP_401,
-    RESP_409_JA_PREMIUM,
+    RESP_409_PLANO,
+    RESP_502_AUTH_SERVICE,
     RESP_ERROS_PAGAMENTO,
     RESP_ERROS_WEBHOOK,
 )
 from app.services import log_client, pagamentos
+from app.services.auth_client import PapelNaoAtualizado, definir_papel_pago
 
 router = APIRouter(prefix="/premium", tags=["premium"])
 
-# O benefício do plano (atividade 7): quem não é premium guarda no máximo
-# isso de favoritos; premium é ilimitado (routers/favorites.py).
-LIMITE_FAVORITOS_GRATIS = 5
+# Plano gratuito: é pra ele que volta quem cancela um plano pago.
+PLANO_GRATUITO = "cinefilo"
+
+
+class CheckoutIn(BaseModel):
+    # Cinéfilo não é vendido (é o gratuito); admin não é plano.
+    plano: Literal["nerd", "stalker_do_tomhanks"]
 
 
 class CheckoutOut(BaseModel):
@@ -29,43 +36,46 @@ class CheckoutOut(BaseModel):
 
 class StatusPremiumOut(BaseModel):
     premium: bool
-    # None = ilimitado (premium).
-    limite_favoritos: int | None
+    # Plano pago ativo (nerd / stalker_do_tomhanks), ou None no gratuito.
+    plano: str | None
 
 
-def eh_premium(db: Session, usuario_id: int) -> bool:
+def plano_pago(db: Session, usuario_id: int) -> str | None:
     assinatura = db.get(Assinatura, usuario_id)
-    return assinatura is not None and assinatura.premium
+    return assinatura.plano if assinatura is not None and assinatura.premium else None
 
 
 @router.post(
     "/checkout",
     response_model=CheckoutOut,
-    responses=RESP_401 | RESP_409_JA_PREMIUM | RESP_ERROS_PAGAMENTO,
+    responses=RESP_401 | RESP_409_PLANO | RESP_ERROS_PAGAMENTO,
 )
 def criar_checkout(
+    dados: CheckoutIn,
     request: Request,
     usuario_atual: UsuarioAutenticado = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ) -> CheckoutOut:
-    """Abre o pagamento do plano premium no Stripe e devolve a URL dele.
+    """Abre o pagamento do plano escolhido no Stripe e devolve a URL dele.
 
     Devolve a URL em vez de um 302 porque o front é uma SPA que se
     autentica por header (Bearer), não por cookie: um redirect do servidor
     não levaria o token. O front recebe a URL e faz o redirecionamento.
 
-    Qualquer papel pode assinar — premium é independente do papel (RBAC)."""
-    if eh_premium(db, usuario_atual.id):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Você já é premium")
+    Só deixa comprar um plano ACIMA do papel atual — comprar o mesmo ou um
+    abaixo não daria nada a mais (admin já tem tudo)."""
+    if NIVEL_PAPEL.get(usuario_atual.role, 0) >= NIVEL_PAPEL[dados.plano]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Você já tem esse plano ou um superior"
+        )
     try:
-        url = pagamentos.criar_checkout(usuario_atual.id)
+        url = pagamentos.criar_checkout(usuario_atual.id, dados.plano)
     except pagamentos.PagamentoNaoConfigurado as erro:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(erro)) from erro
     except pagamentos.PagamentoIndisponivel as erro:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(erro)) from erro
     log_client.registrar_evento(
         usuario_atual.id,
-        "abrir_checkout_premium",
+        f"abrir_checkout:{dados.plano}",
         ip=request.client.host if request.client else None,
     )
     return CheckoutOut(checkout_url=url)
@@ -78,36 +88,62 @@ def status_premium(
 ) -> StatusPremiumOut:
     """O front consulta isso na volta do checkout: a confirmação do
     pagamento chega por outro caminho (webhook), e pode chegar depois do
-    navegador voltar — então ele pergunta até virar `true`."""
-    premium = eh_premium(db, usuario_atual.id)
-    return StatusPremiumOut(
-        premium=premium, limite_favoritos=None if premium else LIMITE_FAVORITOS_GRATIS
-    )
+    navegador voltar — então ele pergunta até o plano aparecer."""
+    plano = plano_pago(db, usuario_atual.id)
+    return StatusPremiumOut(premium=plano is not None, plano=plano)
 
 
-def _ativar_premium(db: Session, sessao: dict) -> None:
+def _trocar_papel(usuario_id: int, papel: str) -> None:
+    try:
+        definir_papel_pago(usuario_id, papel)
+    except PapelNaoAtualizado as erro:
+        # Erro de propósito: sem 2xx, o Stripe reenvia o evento mais tarde
+        # (e processar de novo dá no mesmo) — o pagamento não se perde.
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(erro)) from erro
+
+
+def _ativar_plano(db: Session, sessao: dict) -> None:
     """checkout.session.completed: o pagamento foi concluído. Quem pagou
-    vem do `client_reference_id` que o próprio catálogo pôs na sessão
-    (o id do JWT na hora do checkout) — devolvido intacto pelo Stripe."""
-    if sessao.get("mode") != "subscription" or not sessao.get("client_reference_id"):
+    vem do `client_reference_id` e o plano do `metadata` — os dois postos
+    pelo próprio catálogo na sessão e devolvidos intactos pelo Stripe."""
+    plano = (sessao.get("metadata") or {}).get("plano")
+    if (
+        sessao.get("mode") != "subscription"
+        or not sessao.get("client_reference_id")
+        or plano not in pagamentos.PLANOS_PAGOS
+    ):
         return
     usuario_id = int(sessao["client_reference_id"])
+
+    # Primeiro o papel (no auth-service); só depois grava a assinatura. Se
+    # o auth-service falhar, nada foi gravado e o reenvio do Stripe refaz tudo.
+    _trocar_papel(usuario_id, plano)
+
     assinatura = db.get(Assinatura, usuario_id)
     if assinatura is None:
         assinatura = Assinatura(usuario_id=usuario_id)
         db.add(assinatura)
+    assinatura_antiga = assinatura.stripe_subscription_id
     # Idempotente: o Stripe reenvia o mesmo evento se não receber 2xx a
     # tempo — processar duas vezes dá no mesmo resultado.
     assinatura.premium = True
+    assinatura.plano = plano
     assinatura.stripe_customer_id = sessao.get("customer")
     assinatura.stripe_subscription_id = sessao.get("subscription")
     db.commit()
-    log_client.registrar_evento(usuario_id, "premium_ativado")
+
+    # Trocou de plano (ex.: Nerd -> Stalker): cancela a assinatura anterior.
+    # O cancelamento dispara outro webhook, mas ele não acha mais essa
+    # assinatura no banco (o ID já é o novo) — então não rebaixa ninguém.
+    if assinatura_antiga and assinatura_antiga != assinatura.stripe_subscription_id:
+        pagamentos.cancelar_assinatura(assinatura_antiga)
+    log_client.registrar_evento(usuario_id, f"plano_ativado:{plano}")
 
 
-def _desativar_premium(db: Session, assinatura_stripe: dict) -> None:
+def _encerrar_plano(db: Session, assinatura_stripe: dict) -> None:
     """customer.subscription.deleted: a assinatura acabou (cancelada no
-    painel do Stripe, ou cobrança recusada até esgotar as tentativas)."""
+    painel do Stripe, ou cobrança recusada até esgotar as tentativas) —
+    volta pro plano gratuito."""
     assinatura = (
         db.query(Assinatura)
         .filter(Assinatura.stripe_subscription_id == assinatura_stripe.get("id"))
@@ -115,18 +151,21 @@ def _desativar_premium(db: Session, assinatura_stripe: dict) -> None:
     )
     if assinatura is None:
         return
+    _trocar_papel(assinatura.usuario_id, PLANO_GRATUITO)
+    plano_encerrado = assinatura.plano
     assinatura.premium = False
+    assinatura.plano = None
     db.commit()
-    log_client.registrar_evento(assinatura.usuario_id, "premium_cancelado")
+    log_client.registrar_evento(assinatura.usuario_id, f"plano_cancelado:{plano_encerrado}")
 
 
 _TRATADORES = {
-    "checkout.session.completed": _ativar_premium,
-    "customer.subscription.deleted": _desativar_premium,
+    "checkout.session.completed": _ativar_plano,
+    "customer.subscription.deleted": _encerrar_plano,
 }
 
 
-@router.post("/webhook", responses=RESP_ERROS_WEBHOOK)
+@router.post("/webhook", responses=RESP_ERROS_WEBHOOK | RESP_502_AUTH_SERVICE)
 async def receber_webhook(
     request: Request,
     stripe_signature: str | None = Header(None, alias="Stripe-Signature"),
@@ -136,7 +175,7 @@ async def receber_webhook(
     chamada é legítima é a assinatura no cabeçalho `Stripe-Signature`.
 
     Chega de forma assíncrona: pode vir antes ou depois do navegador
-    voltar do checkout, e é a ÚNICA coisa que marca alguém como premium.
+    voltar do checkout, e é a ÚNICA coisa que ativa um plano pago.
 
     `async` só pra ler o corpo bruto (`await request.body()`) — a
     assinatura é calculada sobre os bytes exatos que o Stripe mandou; se o
@@ -154,6 +193,6 @@ async def receber_webhook(
     # Evento que não interessa: 200 mesmo assim — erro faria o Stripe
     # ficar reenviando à toa.
     if tratador is not None:
-        # Banco e log-service são síncronos: roda fora do event loop.
+        # Banco, auth-service e log-service são síncronos: roda fora do event loop.
         await run_in_threadpool(tratador, db, evento["data"]["object"])
     return {"recebido": True}

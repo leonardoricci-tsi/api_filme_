@@ -68,6 +68,17 @@ def login(dados: LoginIn, request: Request, db: Session = Depends(get_db)) -> To
     return TokenOut(access_token=token)
 
 
+@router.post("/refresh", response_model=TokenOut, responses=RESP_401)
+def refresh(usuario_atual: Usuario = Depends(get_current_user)) -> TokenOut:
+    """Token novo com o papel ATUAL do banco (atividade 7). O papel viaja
+    dentro do JWT, então depois que um pagamento troca o papel, o token
+    antigo continua dizendo o papel velho até expirar — o front chama
+    isto logo que o pagamento é confirmado."""
+    return TokenOut(
+        access_token=create_access_token(usuario_atual.id, usuario_atual.role, usuario_atual.nome)
+    )
+
+
 @router.get("/me", response_model=UsuarioOut, responses=RESP_401)
 def me(usuario_atual: Usuario = Depends(get_current_user)) -> UsuarioOut:
     return usuario_atual

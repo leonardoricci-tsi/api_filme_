@@ -7,8 +7,8 @@ from app.database import Base, utc_now_naive
 
 
 class Assinatura(Base):
-    """Plano premium (atividade 7). Quem nunca abriu um checkout não tem
-    linha aqui — é usuário comum.
+    """Plano pago (atividade 7). Quem nunca pagou não tem linha aqui — está
+    no plano gratuito (Cinéfilo).
 
     Dado de cartão NÃO mora aqui (nem em lugar nenhum deste sistema): o
     número, CVV e validade são digitados na página hospedada pelo Stripe e
@@ -25,6 +25,9 @@ class Assinatura(Base):
     premium: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
+    # Qual plano foi pago — é o papel que o usuário recebe no auth-service
+    # (nerd ou stalker_do_tomhanks). Vazio quando a assinatura acabou.
+    plano: Mapped[str | None] = mapped_column(String(50), nullable=True)
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True

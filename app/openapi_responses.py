@@ -78,7 +78,12 @@ RESP_502_TMDB = {
     )
 }
 
-RESP_409_JA_PREMIUM = {409: _erro("O usuário logado já tem o plano premium ativo", "Você já é premium")}
+RESP_409_PLANO = {
+    409: _erro(
+        "O papel atual do usuário já é o do plano pedido ou um acima (ou é admin)",
+        "Você já tem esse plano ou um superior",
+    )
+}
 
 RESP_ERROS_PAGAMENTO = {
     502: _erro(
@@ -86,8 +91,8 @@ RESP_ERROS_PAGAMENTO = {
         "Provedor de pagamento indisponível no momento",
     ),
     503: _erro(
-        "Chaves do Stripe não configuradas neste ambiente (premium desligado)",
-        "Plano premium indisponível neste ambiente",
+        "Chaves/preços do Stripe não configurados neste ambiente (venda desligada)",
+        "Venda de planos indisponível neste ambiente",
     ),
 }
 
@@ -100,11 +105,4 @@ RESP_ERROS_WEBHOOK = {
         "STRIPE_WEBHOOK_SECRET não configurado neste ambiente",
         "Webhook do Stripe não configurado neste ambiente",
     ),
-}
-
-RESP_403_LIMITE_FAVORITOS = {
-    403: _erro(
-        "Usuário sem plano premium já tem o máximo de favoritos do plano gratuito",
-        "Limite de 5 favoritos do plano gratuito atingido. Assine o plano Cinéfilo para favoritos ilimitados",
-    )
 }

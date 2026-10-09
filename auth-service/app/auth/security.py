@@ -37,3 +37,18 @@ def decode_access_token(token: str) -> int | None:
         return int(sub)
     except ValueError:
         return None
+
+
+def decode_service_token(token: str) -> dict | None:
+    """Token de SERVIÇO (atividade 7): é o catálogo, não um usuário, pedindo
+    pra trocar o papel de alguém depois de um pagamento confirmado. Mesmo
+    JWT_SECRET compartilhado, mas outro formato: tem `servico` e NÃO tem
+    `sub` — então não serve como token de usuário (decode_access_token
+    exige `sub`), e token de usuário não serve aqui (não tem `servico`)."""
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except jwt.PyJWTError:
+        return None
+    if payload.get("servico") != "catalogo" or "sub" in payload:
+        return None
+    return payload

@@ -1,4 +1,7 @@
+from datetime import datetime, timedelta, timezone
+
 import httpx
+import jwt
 
 from app.config import get_settings
 
@@ -32,3 +35,36 @@ def forward(method: str, path: str, **kwargs) -> httpx.Response:
         raise AuthServiceUnavailable(
             "Serviço de autenticação indisponível no momento"
         ) from erro
+
+
+class PapelNaoAtualizado(Exception):
+    """O auth-service não confirmou a troca de papel do plano pago."""
+
+
+def definir_papel_pago(usuario_id: int, papel: str) -> None:
+    """Pede ao auth-service (dono da tabela `usuarios`) pra trocar o papel
+    de quem pagou ou cancelou um plano (atividade 7).
+
+    Quem chama não é um usuário, é o próprio catálogo: o token é de
+    SERVIÇO — assinado com o mesmo JWT_SECRET, com `servico` e sem `sub`,
+    válido por 1 minuto. Não serve como token de usuário em lugar nenhum."""
+    settings = get_settings()
+    token = jwt.encode(
+        {
+            "servico": "catalogo",
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=1),
+        },
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+    try:
+        resposta = forward(
+            "PUT",
+            f"/internal/users/{usuario_id}/role",
+            json={"role": papel},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    except AuthServiceUnavailable as erro:
+        raise PapelNaoAtualizado(str(erro)) from erro
+    if resposta.status_code != 200:
+        raise PapelNaoAtualizado(f"auth-service respondeu {resposta.status_code}")

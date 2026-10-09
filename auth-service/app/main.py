@@ -5,7 +5,7 @@ from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.config import get_settings
-from app.routers import admin, auth, health, password_reset
+from app.routers import admin, auth, health, internal, password_reset
 
 
 @asynccontextmanager
@@ -27,6 +27,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(password_reset.router)
 app.include_router(admin.router)
+app.include_router(internal.router)
 
 # Contagem de requisições por rota (sempre o template, ex.
 # /auth/admin/users/{usuario_id}/role, nunca o id de verdade) e código de

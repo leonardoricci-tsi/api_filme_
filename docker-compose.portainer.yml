@@ -39,10 +39,11 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_BUCKET: ${S3_BUCKET:-api-filmes-perfis}
-      # Plano premium (atividade 7), Stripe em modo de teste. O
+      # Planos pagos (atividade 7), Stripe em modo de teste. O
       # CATALOG_PUBLIC_URL é pra onde o Stripe devolve o navegador.
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
-      STRIPE_PRICE_ID: ${STRIPE_PRICE_ID}
+      STRIPE_PRICE_NERD: ${STRIPE_PRICE_NERD}
+      STRIPE_PRICE_STALKER: ${STRIPE_PRICE_STALKER}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
       CATALOG_PUBLIC_URL: ${CATALOG_PUBLIC_URL}
     # Readiness de verdade (GET /health do catálogo): com o MySQL fora ele

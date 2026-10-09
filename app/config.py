@@ -29,11 +29,14 @@ class Settings(BaseSettings):
     # Tem que bater com o `s3_region` do garage.toml, senão a assinatura falha.
     s3_region: str = "garage"
     s3_url_expira_segundos: int = 900
-    # Plano premium (atividade 7), Stripe em MODO DE TESTE. Vazios = premium
-    # desligado (checkout responde 503), pra o CI e quem não configurou o
-    # Stripe continuarem subindo a stack normalmente.
+    # Planos pagos (atividade 7), Stripe em MODO DE TESTE. Cada plano é um
+    # papel do RBAC: Cinéfilo é o gratuito (todo cadastro nasce nele), Nerd
+    # e Stalker do Tom Hanks são vendidos — um `price_...` pra cada.
+    # Vazios = venda desligada (checkout responde 503), pra o CI e quem não
+    # configurou o Stripe continuarem subindo a stack normalmente.
     stripe_secret_key: str = ""
-    stripe_price_id: str = ""
+    stripe_price_nerd: str = ""
+    stripe_price_stalker: str = ""
     stripe_webhook_secret: str = ""
     # Pra onde o Stripe manda o navegador de volta depois do checkout.
     catalog_public_url: str = "http://localhost:8000"

@@ -94,8 +94,9 @@ def auth_headers(token: str) -> dict:
 
 @pytest.fixture()
 def auth_service():
-    """Mocka o `GET /auth/users/{id}` do auth-service (de onde vem o nome) e
-    o log-service, que o catálogo chama em fire-and-forget."""
+    """Mocka o `GET /auth/users/{id}` do auth-service (de onde vem o nome), o
+    `PUT /internal/users/{id}/role` (plano pago) e o log-service, que o
+    catálogo chama em fire-and-forget."""
     settings = get_settings()
     auth_url, log_url = settings.auth_service_url, settings.log_service_url
     with respx.mock(assert_all_called=False) as mock:
@@ -103,4 +104,8 @@ def auth_service():
             side_effect=lambda request, id: Response(200, json={"id": int(id), "nome": f"Usuário {id}"})
         )
         mock.post(f"{log_url}/logs").mock(return_value=Response(201, json={"id": "1-0"}))
+        # Troca de papel pelo plano pago (atividade 7) — rota interna.
+        mock.put(url__regex=rf"{auth_url}/internal/users/(?P<id>\d+)/role", name="definir_papel").mock(
+            side_effect=lambda request, id: Response(200, json={"id": int(id)})
+        )
         yield mock

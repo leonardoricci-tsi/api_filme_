@@ -93,6 +93,18 @@ def logout(
     )
 
 
+@router.post("/refresh", responses=RESP_401 | RESP_502_AUTH_SERVICE)
+def refresh(authorization: str | None = Header(None)) -> JSONResponse:
+    """Token novo com o papel atual (atividade 7): depois que um plano pago
+    troca o papel, o token antigo ainda carrega o papel velho."""
+    headers = {"Authorization": authorization} if authorization else {}
+    try:
+        resposta = forward("POST", "/auth/refresh", headers=headers)
+    except AuthServiceUnavailable as erro:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(erro)) from erro
+    return _proxy(resposta)
+
+
 @router.get("/me", responses=RESP_401 | RESP_502_AUTH_SERVICE)
 def me(authorization: str | None = Header(None)) -> JSONResponse:
     headers = {"Authorization": authorization} if authorization else {}
