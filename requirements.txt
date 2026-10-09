@@ -13,6 +13,8 @@ python-dotenv==1.0.1
 pillow==11.1.0
 python-multipart==0.0.32
 boto3==1.43.103
+# Plano premium (atividade 7): checkout e webhook do Stripe
+stripe==16.0.0
 
 # Observabilidade: /metrics (Prometheus) — contagem por rota/status e latência
 prometheus-fastapi-instrumentator==7.1.0

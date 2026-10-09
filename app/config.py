@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     # Tem que bater com o `s3_region` do garage.toml, senão a assinatura falha.
     s3_region: str = "garage"
     s3_url_expira_segundos: int = 900
+    # Plano premium (atividade 7), Stripe em MODO DE TESTE. Vazios = premium
+    # desligado (checkout responde 503), pra o CI e quem não configurou o
+    # Stripe continuarem subindo a stack normalmente.
+    stripe_secret_key: str = ""
+    stripe_price_id: str = ""
+    stripe_webhook_secret: str = ""
+    # Pra onde o Stripe manda o navegador de volta depois do checkout.
+    catalog_public_url: str = "http://localhost:8000"
     # Porta interna do /metrics (Prometheus). 0 desliga — usado nos testes.
     metrics_port: int = 9100
 

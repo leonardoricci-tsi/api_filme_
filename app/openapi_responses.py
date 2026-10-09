@@ -77,3 +77,16 @@ RESP_502_TMDB = {
         "Falha ao buscar movie_credits no TMDB: HTTP 500",
     )
 }
+
+RESP_409_JA_PREMIUM = {409: _erro("O usuário logado já tem o plano premium ativo", "Você já é premium")}
+
+RESP_ERROS_PAGAMENTO = {
+    502: _erro(
+        "Stripe fora do ar ou recusou a criação do checkout",
+        "Provedor de pagamento indisponível no momento",
+    ),
+    503: _erro(
+        "Chaves do Stripe não configuradas neste ambiente (premium desligado)",
+        "Plano premium indisponível neste ambiente",
+    ),
+}

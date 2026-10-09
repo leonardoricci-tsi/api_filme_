@@ -6,7 +6,18 @@ from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.config import get_settings
-from app.routers import admin, auth, comments, favorites, health, movies, profiles, quiz, storage_proxy
+from app.routers import (
+    admin,
+    auth,
+    comments,
+    favorites,
+    health,
+    movies,
+    premium,
+    profiles,
+    quiz,
+    storage_proxy,
+)
 
 
 @asynccontextmanager
@@ -33,6 +44,7 @@ app.include_router(comments.router)
 app.include_router(admin.router)
 app.include_router(quiz.router)
 app.include_router(profiles.router)
+app.include_router(premium.router)
 # Antes do mount de "/": senão o StaticFiles engole o caminho da foto.
 app.include_router(storage_proxy.router)
 
