@@ -12,6 +12,8 @@ API FastAPI que lista filmes do Tom Hanks (dados sempre ao vivo da TMDB, nunca p
 
 **Atividade 6 — armazenamento de objetos:** o catálogo virou uma rede social simples: cada usuário tem uma página de perfil com foto, bio e os filmes favoritados. A foto **não vai pro banco** — vai pra um object storage (Garage, compatível com S3), e o MySQL guarda só a chave do objeto. Veja a seção [Perfil e fotos](#perfil-e-fotos-object-storage-atividade-6).
 
+**Atividade 7 — serviço baseado em pagamento:** o catálogo ganhou um modelo de negócio. Os níveis de fã viraram planos: **Cinéfilo** (gratuito), **Nerd** (R$ 19,90/mês) e **Stalker do Tom Hanks** (R$ 9.999,90/mês), cobrados pelo **Stripe em modo de teste**. O cartão é digitado na página hospedada pelo Stripe e nunca chega no backend; o pagamento é confirmado por **webhook com assinatura validada**, que troca o papel do usuário e libera as funções do plano. Veja a seção [Planos pagos](#planos-pagos-stripe-atividade-7).
+
 **Atividade extra — CI/CD com GitHub Actions:** deploy sem clicar em nada. A cada `git push`, o GitHub Actions roda os testes, builda as imagens e sobe a stack inteira pra um smoke test; se tudo passou, publica as imagens no GHCR com a tag do commit (`sha-xxxxxxx`) e o Portainer coloca essa versão no ar sozinho. Veja a seção [CI/CD](#cicd-github-actions-atividade-extra).
 
 **Atividade extra — Observabilidade:** cada serviço agora diz como está de saúde, sem ninguém abrir um terminal. `/health` com readiness de verdade (testa MySQL, Redis, Garage e devolve `503` quando uma dependência crítica cai), `HEALTHCHECK` do Docker em todos os containers, `/metrics` pro Prometheus e um painel no Grafana (bônus). Veja a seção [Observabilidade](#observabilidade-health-checks-e-métricas-atividade-extra).
@@ -22,6 +24,7 @@ API FastAPI que lista filmes do Tom Hanks (dados sempre ao vivo da TMDB, nunca p
 - **Auth:** microsserviço próprio (`auth-service/`), cadastro/login com senha em hash `bcrypt`, sessão via JWT (assinatura verificada localmente pelo catálogo), papéis `usuario`/`admin`, recuperação de senha por e-mail com token de expiração de 30 minutos
 - **Observabilidade:** `/health` (liveness/readiness) + `HEALTHCHECK` do Docker; métricas com `prometheus-fastapi-instrumentator`, coletadas pelo Prometheus e exibidas no Grafana
 - **Object storage:** [Garage](https://garagehq.deuxfleurs.fr) (API S3, cliente `boto3`) — fotos de perfil; o banco guarda só a chave do objeto
+- **Pagamentos:** [Stripe](https://stripe.com) em modo de teste (SDK `stripe` 16): Checkout Session hospedada pelo Stripe + webhook assinado (HMAC-SHA256)
 - **E-mail:** SMTP — Mailtrap em desenvolvimento (sandbox, não entrega de verdade), Brevo em produção
 - **Frontend:** Angular (standalone components), build servido como estático pelo próprio FastAPI em produção
 
@@ -177,6 +180,102 @@ O catálogo é dono do perfil (tabela `perfis`: `usuario_id`, `bio`, `foto_key`)
 
 ### Por que Garage e não MinIO
 O enunciado sugere MinIO, mas a edição community dele foi arquivada e perdeu recursos (console, imagens Docker publicadas). O professor liberou a troca. O Garage fala a mesma API S3, então o código do catálogo é o de qualquer S3 (`boto3`), e trocar de volta seria só configuração. A partir da v2.3, `garage server --single-node --default-bucket` monta o cluster de um nó e cria a chave de acesso e o bucket a partir de variáveis de ambiente, sem passo manual de `garage layout`/`garage key`. O `garage/garage.toml` não tem segredo nenhum (o `rpc_secret` vem de `GARAGE_RPC_SECRET`) e vai dentro de uma imagem própria (`garage/Dockerfile`), porque no Portainer não há repositório pra montar o arquivo como volume.
+
+## Planos pagos (Stripe, atividade 7)
+
+Os papéis da [atividade 4](#autorização-rbac-atividade-4) viraram planos, os mesmos três cards da landing page:
+
+| Plano | Papel | Preço | O que libera |
+|---|---|---|---|
+| 🍿 Cinéfilo | `cinefilo` | **grátis** (todo cadastro nasce nele) | catálogo, sinopse e ficha técnica, perfil |
+| 🤓 Nerd | `nerd` | R$ 19,90/mês | + favoritar, comentar |
+| 🕵️ Stalker do Tom Hanks | `stalker_do_tomhanks` | R$ 9.999,90/mês | + quiz do pôster pixelado ("fã-clube") |
+
+O benefício de pagar é **o próprio RBAC**: a mesma ação devolve `403` antes e `201` depois do pagamento, do mesmo jeito que a atividade 4 mostrou com papéis. Nada novo pra conferir em cada rota: `require_papel_minimo("nerd")` já fazia isso. A única novidade é como o papel muda: antes só um admin trocava; agora o pagamento troca.
+
+### Por que pagamento é delegado
+Guardar dado de cartão exige conformidade PCI-DSS, que este sistema não tem nem deveria tentar ter. Então ele **nunca vê o cartão**: o checkout é uma página **hospedada pelo Stripe** (`checkout.stripe.com`). O banco guarda, no máximo, os IDs que o Stripe devolve:
+
+```
+assinaturas (catálogo)
+  usuario_id              PK (sem FK, igual perfis/favoritos: usuarios é de outro serviço)
+  premium                 só vira 1 pelo webhook
+  plano                   nerd | stalker_do_tomhanks
+  stripe_customer_id      cus_...
+  stripe_subscription_id  sub_...
+```
+
+Não existe coluna de número, CVV ou validade. Esses dados nem passam pelo backend.
+
+### O fluxo
+```
+Navegador ──POST /premium/checkout {plano}──▶ Catálogo ──cria Checkout Session──▶ Stripe
+    ◀──────────────── { checkout_url } ─────────┘
+    │
+    └──redireciona──▶ checkout.stripe.com (cartão digitado AQUI)
+                         │                         │
+         volta pro site  │                         │ assíncrono, por outro caminho:
+  /app/planos?checkout=  │                         ▼
+         sucesso         │      POST /premium/webhook (assinado) ──▶ Catálogo
+                         │                                            │ 1. valida a assinatura
+                         ▼                                            │ 2. PUT /internal/users/{id}/role ──▶ auth-service
+              front pergunta GET /premium/status                      │ 3. grava a assinatura no MySQL
+              até o plano aparecer, aí POST /auth/refresh             ▼
+              (token novo com o papel novo)                    usuario vira nerd
+```
+
+1. **`POST /premium/checkout`** (`app/routers/premium.py`) cria a Checkout Session com `client_reference_id = id do JWT` e `metadata.plano`. O Stripe devolve esses dois intactos no webhook, e é assim que o catálogo sabe quem pagou e o quê. A rota devolve a URL em vez de um `302`, porque a SPA se autentica por header `Bearer`, e um redirect do servidor não levaria o token; quem redireciona é o front.
+   - Só vende plano **acima** do papel atual. Mesmo plano, plano abaixo ou admin recebem `409`.
+   - Cinéfilo não está à venda: pedir esse plano dá `422`.
+2. A **volta do navegador** (`?checkout=sucesso`) **não ativa nada**: essa URL qualquer um digita. A tela só espera.
+3. O **webhook** (`POST /premium/webhook`) é a única coisa que ativa um plano. Ele chega de forma assíncrona, pode vir antes ou depois do navegador voltar, e por isso o front pergunta `GET /premium/status` a cada 2 s.
+
+### Validação da assinatura do webhook
+A rota é pública e não tem JWT, porque quem chama é o Stripe. Sem validação, qualquer um daria um `curl` com um JSON inventado e virava Stalker de graça. Então:
+- O Stripe assina cada chamada no cabeçalho `Stripe-Signature`: um **HMAC-SHA256 do corpo bruto** com o segredo do endpoint (`whsec_...`), que só o Stripe e o servidor conhecem, mais um **timestamp**.
+- `pagamentos.validar_webhook` confere a assinatura (`stripe.WebhookSignature.verify_header`) sobre os **bytes exatos** recebidos. A rota é `async` só pra ler `await request.body()`: se o FastAPI parseasse e reserializasse o JSON, a assinatura não bateria.
+- São recusados com `400`, sem tocar no banco:
+  - sem cabeçalho de assinatura;
+  - assinado com outro segredo;
+  - corpo alterado depois de assinado;
+  - evento com mais de 5 minutos (reenvio de um evento antigo capturado).
+
+  Cada caso tem teste em `tests/test_premium_webhook.py`.
+- **Idempotente:** o Stripe reenvia o evento se não receber `2xx`, e processar duas vezes dá no mesmo resultado.
+
+### Trocar o papel: catálogo → auth-service
+Quem é dono da tabela `usuarios` continua sendo só o `auth-service`. O webhook chama uma rota **interna** nova, `PUT /internal/users/{id}/role`, protegida por um **token de serviço**:
+- é assinado com o mesmo `JWT_SECRET`, mas tem `servico: "catalogo"` e **não tem `sub`**, e vale 1 minuto;
+- sem `sub`, ele **não serve como login de usuário** (o auth-service exige `sub`);
+- um token de usuário **não serve na rota interna** (não tem `servico`);
+- nem o catálogo repassa `/internal/*` pra fora.
+
+A ordem importa: primeiro o papel, depois a assinatura no MySQL. Se o auth-service estiver fora, o webhook responde `502`, nada é gravado e o Stripe **reenvia o evento mais tarde**. O pagamento não se perde.
+
+Outros detalhes:
+- **Subir de plano** (Nerd → Stalker): a assinatura antiga é cancelada no Stripe pra ninguém pagar dois planos.
+- **Cancelamento** (`customer.subscription.deleted`): volta pra `cinefilo`.
+- **Admin** nunca é rebaixado por plano.
+
+### O papel mora no JWT: `POST /auth/refresh`
+O papel viaja dentro do token (Padrão B da atividade 4). Logo depois do pagamento, o banco já diz `nerd`, mas o token guardado no navegador ainda diz `cinefilo`. Por isso o `auth-service` ganhou `POST /auth/refresh`, que reemite o token com o papel atual do banco. O front chama essa rota assim que o webhook confirma, e o menu libera Favoritos e Comentários na hora, sem relogar.
+
+Esse é o preço conhecido do Padrão B: num **cancelamento**, um token antigo continua dizendo o papel pago até expirar (`JWT_EXPIRE_MINUTES`).
+
+### Configurar o Stripe
+1. Conta gratuita no Stripe, sempre em **modo de teste** (sandbox). Crie dois produtos com preço recorrente mensal em BRL: Nerd e Stalker do Tom Hanks.
+2. Preencha `STRIPE_SECRET_KEY` (`sk_test_...`), `STRIPE_PRICE_NERD` e `STRIPE_PRICE_STALKER` (`price_...`) no `.env`.
+3. **Webhook em desenvolvimento:** o Stripe não alcança `localhost`, então o [Stripe CLI](https://docs.stripe.com/stripe-cli) faz o túnel:
+   ```bash
+   stripe login
+   stripe listen --forward-to localhost:8000/premium/webhook \
+     --events checkout.session.completed,customer.subscription.deleted
+   ```
+   O `whsec_...` que ele mostra vai em `STRIPE_WEBHOOK_SECRET`.
+4. **Webhook em produção:** endpoint criado no painel (*Developers → Webhooks*) apontando pra `https://<domínio>/premium/webhook`, com os mesmos dois eventos. O segredo de assinatura dele, que é outro, vai nas variáveis da stack no Portainer.
+5. Pagar com o cartão de teste `4242 4242 4242 4242`, qualquer validade futura e qualquer CVC.
+
+Sem as chaves, a venda fica desligada (`503`) e o resto sobe normal. É assim que o CI roda.
 
 ## CI/CD (GitHub Actions, atividade extra)
 
@@ -374,6 +473,13 @@ S3_PUBLIC_URL=http://localhost:8000      # o endereço pelo qual o site é acess
 
 # Grafana (observabilidade) — openssl rand -hex 16
 GRAFANA_ADMIN_PASSWORD=...
+
+# Stripe (atividade 7) — sempre modo de teste
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PRICE_NERD=price_...
+STRIPE_PRICE_STALKER=price_...
+STRIPE_WEBHOOK_SECRET=whsec_...          # o do `stripe listen`, em dev
+CATALOG_PUBLIC_URL=http://localhost:8000 # pra onde o Stripe devolve o navegador
 ```
 
 ### 4. Rodar as migrations (catálogo e auth-service)
@@ -490,12 +596,16 @@ Os testes do `log-service` usam `fakeredis` (Redis em memória, sem precisar de 
 | GET | `/profiles/{id}` | sim | Perfil de qualquer usuário: nome, bio, `foto_url` (pré-assinada, 15 min), favoritos, `eh_meu` |
 | PATCH | `/profiles/{id}` | sim (só o dono) | Edita a bio — `403` se `{id}` não for o do token |
 | POST | `/profiles/{id}/foto` | sim (só o dono) | Upload da foto (`multipart`, campo `arquivo`; JPEG/PNG/WEBP, até 2 MB) — `403`, `413`, `415`, `502` |
+| POST | `/premium/checkout` | sim | Corpo `{"plano": "nerd" \| "stalker_do_tomhanks"}`: cria a Checkout Session do Stripe e devolve `checkout_url`. `409` se já tiver o plano ou um acima, `503` sem Stripe configurado |
+| GET | `/premium/status` | sim | `{premium, plano}` do usuário logado (o front consulta na volta do checkout) |
+| POST | `/premium/webhook` | assinatura `Stripe-Signature` | Chamado pelo Stripe: ativa ou encerra o plano e troca o papel. `400` com assinatura inválida |
+| POST | `/auth/refresh` | sim | Proxy pro `auth-service`: token novo com o papel atual (depois de um pagamento) |
 | GET | `/api-filmes-perfis/{chave}?X-Amz-...` | assinatura na URL | Não é rota da API (fora do Swagger): repassa a URL pré-assinada pro Garage, que valida a assinatura |
 
 Autenticação via header `Authorization: Bearer <token>`. "nerd+" = `nerd`, `stalker_do_tomhanks` ou `admin`; "stalker+" = `stalker_do_tomhanks` ou `admin` — a escada é cumulativa (veja [Autorização (RBAC)](#autorização-rbac-atividade-4)).
 
 ### auth-service (interno, sem acesso externo)
-Só respondem pra chamadas vindas do catálogo, dentro da rede `catalog-net`: `/auth/register`, `/auth/login`, `/auth/me`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/admin/users`, `/auth/admin/users/{id}/role`, `/auth/users/{id}` (só `id` e `nome`, pra página de perfil).
+Só respondem pra chamadas vindas do catálogo, dentro da rede `catalog-net`: `/auth/register`, `/auth/login`, `/auth/me`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/admin/users`, `/auth/admin/users/{id}/role`, `/auth/users/{id}` (só `id` e `nome`, pra página de perfil), `/auth/refresh` e `/internal/users/{id}/role` (troca de papel pelo plano pago; só aceita o token de serviço do catálogo, ver [Planos pagos](#trocar-o-papel-catálogo--auth-service)).
 
 ### log-service (interno, sem acesso externo)
 Só respondem pra chamadas vindas do catálogo ou do `auth-service`, dentro da rede `catalog-net`:
@@ -549,9 +659,10 @@ app/                    # catálogo
   routers/      # rotas da API: quiz.py (pixelado, stalker+), admin.py (moderação de comentários e favoritos),
                 #   auth.py (proxy de /auth/* e /auth/admin/* pro auth-service), comments/favorites (nerd+),
                 #   profiles.py (perfil + upload de foto, só o dono edita), storage_proxy.py (repasse da URL
-                #   pré-assinada pro Garage)
+                #   pré-assinada pro Garage), premium.py (checkout, status e webhook do Stripe, atividade 7)
   services/     # cliente HTTP do auth-service (auth_client.py), do log-service (log_client.py) + cliente da TMDB,
-                #   storage.py (Garage via boto3), imagem.py (validação/reencodagem da foto com Pillow)
+                #   storage.py (Garage via boto3), imagem.py (validação/reencodagem da foto com Pillow),
+                #   pagamentos.py (Checkout Session e validação da assinatura do webhook do Stripe)
   openapi_responses.py  # blocos de erro (401/403/404/409/502) reaproveitados no responses= de cada rota
   static/       # build de produção do Angular (gerado por `npm run build`, não editar à mão)
 alembic/        # migrations do catálogo
@@ -562,7 +673,8 @@ auth-service/           # microsserviço de autenticação
     models/     # Usuario (com role: cinefilo/nerd/stalker_do_tomhanks/admin), ResetToken
     auth/       # hash de senha, emissão/validação de JWT, geração e validação de reset tokens, require_admin
     routers/    # /auth/* (register, login, me), /auth/forgot-password, /auth/reset-password,
-                #   /auth/admin/users e /auth/admin/users/{id}/role (admin.py, atividade 4)
+                #   /auth/admin/users e /auth/admin/users/{id}/role (admin.py, atividade 4), /auth/refresh,
+                #   internal.py (PUT /internal/users/{id}/role, só com token de serviço do catálogo, atividade 7)
     services/   # mailer.py (e-mail de redefinição via SMTP), log_client.py (evento de login/403 pro log-service)
     openapi_responses.py  # mesma ideia do catálogo, blocos de erro pro Swagger
   alembic/      # migrations do auth-service (histórico próprio, alembic_version_auth)
@@ -579,7 +691,7 @@ frontend/       # projeto Angular (standalone components)
     layout/     # header (avatar + navegação) e app-shell (layout das rotas privadas)
     shared/     # movie-card (usado no catálogo e nos favoritos, com diálogo de comentários)
     features/   # telas: auth/login, auth/register, auth/forgot-password, auth/reset-password, catalog, favorites,
-                #   comments, profile (perfil com foto, bio e favoritos)
+                #   comments, profile (perfil com foto, bio e favoritos), planos (os 3 planos + volta do Stripe)
 garage/                 # Dockerfile + garage.toml do object storage (atividade 6), sem segredos
 .github/workflows/ci.yml  # pipeline de CI/CD: testes, build, smoke test, publicação no GHCR e deploy
 scripts/smoke-test.sh   # smoke test da stack inteira de pé (usado pelo CI)
@@ -601,9 +713,44 @@ docs/openapi/           # spec OpenAPI exportada de auth-service e log-service (
 - `npm run build` copia `index.html` para `404.html` em `app/static` (truque padrão do Starlette pra SPA): assim, um refresh direto numa rota do Angular (ex: `/favoritos`) ainda carrega o app em vez de um 404 vazio.
 - Auditoria (atividade 5) é fire-and-forget: uma falha no `log-service` (fora do ar, rede interna com problema) nunca derruba a ação real do usuário — favoritar/comentar/logar não podem virar `500` por causa de um serviço que só observa. O custo é a possibilidade (rara) de perder um evento se o `log-service` cair bem na hora; pra essa atividade, não justifica trocar por fila/retry.
 - Foto de perfil (atividade 6): tipo conferido pelos bytes, não pelo `Content-Type`; tamanho e dimensão limitados antes de decodificar; reencodada (sem EXIF/GPS); chave gerada pelo servidor; bucket privado, lido só por URL pré-assinada com expiração.
+- Pagamento (atividade 7): o cartão nunca passa pelo backend (página hospedada pelo Stripe); o banco guarda só `cus_`/`sub_`. Só o webhook com assinatura HMAC válida (e timestamp de até 5 min) ativa um plano, e a volta do navegador do checkout não ativa nada. A troca de papel no `auth-service` usa um token de serviço sem `sub`, que não serve como login.
 - `log-service` não tem tabela de usuários própria — decodifica o mesmo JWT localmente (mesmo `JWT_SECRET`) pra saber quem é admin, igual o catálogo faz pro resto do RBAC.
 
 ## Evidências
+
+### Atividade 7 — Planos pagos com Stripe (modo de teste)
+
+Usuário de teste: **Bruno** (id 35), no plano gratuito, assinando o **Nerd**.
+
+**1. Antes de pagar, a ação é negada:** no plano Cinéfilo, favoritar devolve `403` (`Ação exige papel 'nerd' ou superior`) e a tela leva pros planos. O menu só tem "Catálogo".
+
+![Bruno no plano gratuito: favoritar devolve 403](docs/evidencias/planos-1-gratuito-403-favoritar.jpg)
+
+**2. Página de planos** (`/app/planos`): Cinéfilo marcado como "Seu plano"; Nerd e Stalker à venda.
+
+![Página de planos com os três níveis](docs/evidencias/planos-2-pagina-de-planos.jpg)
+
+**3. Checkout hospedado pelo Stripe, em modo de teste** ("Área restrita"): Nerd a R$ 19,90/mês, pago com o cartão de teste `4242 4242 4242 4242`. É uma página do Stripe; o cartão nunca passa pelo nosso backend.
+
+![Checkout do Stripe em modo de teste com o cartão 4242](docs/evidencias/planos-3-checkout-stripe-nerd.jpg)
+
+**4. Pagamento concluído no Stripe:** `Succeeded`, R$ 19,90, •••• 4242, no sandbox. O cliente Bruno Curioso foi criado lá, não aqui.
+
+![Pagamento do plano Nerd com status Succeeded no painel do Stripe](docs/evidencias/planos-7-stripe-pagamento-nerd-sucesso.png)
+
+![Cliente Bruno Curioso no painel do Stripe](docs/evidencias/planos-6-stripe-cliente-bruno.png)
+
+**5. De volta ao site, depois do webhook:** "Pagamento confirmado! Agora você está no plano Nerd". O token foi renovado e o menu já mostra Favoritos e Comentários.
+
+![Página de planos depois da confirmação: Nerd é o plano atual](docs/evidencias/planos-4-pagamento-confirmado-nerd.jpg)
+
+**6. No banco, depois do webhook:** `assinaturas` com `premium = 1`, `plano = nerd` e o `sub_...` do Stripe (nenhum dado de cartão), e o papel em `usuarios` já é `nerd`.
+
+![MySQL: assinatura do Bruno com plano nerd e papel nerd](docs/evidencias/planos-8-mysql-assinatura-e-papel.png)
+
+**7. O benefício funcionando:** a **mesma ação** do print 1 agora devolve `201`, com o botão em "★ Favoritado".
+
+![Bruno no plano Nerd: favoritar funciona](docs/evidencias/planos-5-nerd-201-favoritar.jpg)
 
 ### Atividade extra — Observabilidade: health checks e métricas
 
