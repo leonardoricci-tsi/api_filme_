@@ -90,3 +90,14 @@ RESP_ERROS_PAGAMENTO = {
         "Plano premium indisponível neste ambiente",
     ),
 }
+
+RESP_ERROS_WEBHOOK = {
+    400: _erro(
+        "Cabeçalho Stripe-Signature ausente, inválido ou velho demais — a chamada não veio do Stripe",
+        "Assinatura do webhook inválida",
+    ),
+    503: _erro(
+        "STRIPE_WEBHOOK_SECRET não configurado neste ambiente",
+        "Webhook do Stripe não configurado neste ambiente",
+    ),
+}

@@ -51,3 +51,24 @@ def criar_checkout(usuario_id: int) -> str:
     except stripe.StripeError as erro:
         raise PagamentoIndisponivel("Provedor de pagamento indisponível no momento") from erro
     return sessao.url
+
+
+class AssinaturaWebhookInvalida(Exception):
+    """A requisição no /premium/webhook não foi assinada pelo Stripe."""
+
+
+def validar_webhook(payload: bytes, assinatura: str | None) -> None:
+    """Confere o cabeçalho `Stripe-Signature`: um HMAC-SHA256 do corpo
+    BRUTO com o segredo do endpoint (whsec_...), que só o Stripe e este
+    servidor conhecem, mais um timestamp (rejeita reenvio de evento velho,
+    tolerância de 5 min). A rota é pública — sem isso, qualquer um com
+    um `curl` se daria premium de graça."""
+    segredo = get_settings().stripe_webhook_secret
+    if not segredo:
+        raise PagamentoNaoConfigurado("Webhook do Stripe não configurado neste ambiente")
+    try:
+        stripe.WebhookSignature.verify_header(
+            payload, assinatura, segredo, tolerance=stripe.Webhook.DEFAULT_TOLERANCE
+        )
+    except stripe.SignatureVerificationError as erro:
+        raise AssinaturaWebhookInvalida("Assinatura do webhook inválida") from erro
