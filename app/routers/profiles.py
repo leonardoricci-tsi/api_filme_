@@ -15,6 +15,7 @@ from app.openapi_responses import (
     RESP_502_STORAGE,
     RESP_ERROS_FOTO,
 )
+from app.routers.premium import eh_premium
 from app.schemas.profile import PerfilOut, PerfilUpdateIn
 from app.services import log_client, storage
 from app.services.imagem import (
@@ -93,6 +94,7 @@ def _montar_perfil(
         bio=(perfil.bio if perfil else None) or "",
         foto_url=storage.gerar_url_temporaria(foto_key) if foto_key else None,
         eh_meu=usuario_id == usuario_atual.id,
+        premium=eh_premium(db, usuario_id),
         favoritos=favoritos,
     )
 

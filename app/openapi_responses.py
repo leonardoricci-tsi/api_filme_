@@ -101,3 +101,10 @@ RESP_ERROS_WEBHOOK = {
         "Webhook do Stripe não configurado neste ambiente",
     ),
 }
+
+RESP_403_LIMITE_FAVORITOS = {
+    403: _erro(
+        "Usuário sem plano premium já tem o máximo de favoritos do plano gratuito",
+        "Limite de 5 favoritos do plano gratuito atingido. Assine o plano Cinéfilo para favoritos ilimitados",
+    )
+}

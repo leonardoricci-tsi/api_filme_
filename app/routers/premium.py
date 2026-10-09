@@ -18,6 +18,10 @@ from app.services import log_client, pagamentos
 
 router = APIRouter(prefix="/premium", tags=["premium"])
 
+# O benefício do plano (atividade 7): quem não é premium guarda no máximo
+# isso de favoritos; premium é ilimitado (routers/favorites.py).
+LIMITE_FAVORITOS_GRATIS = 5
+
 
 class CheckoutOut(BaseModel):
     checkout_url: str
@@ -25,6 +29,8 @@ class CheckoutOut(BaseModel):
 
 class StatusPremiumOut(BaseModel):
     premium: bool
+    # None = ilimitado (premium).
+    limite_favoritos: int | None
 
 
 def eh_premium(db: Session, usuario_id: int) -> bool:
@@ -73,7 +79,10 @@ def status_premium(
     """O front consulta isso na volta do checkout: a confirmação do
     pagamento chega por outro caminho (webhook), e pode chegar depois do
     navegador voltar — então ele pergunta até virar `true`."""
-    return StatusPremiumOut(premium=eh_premium(db, usuario_atual.id))
+    premium = eh_premium(db, usuario_atual.id)
+    return StatusPremiumOut(
+        premium=premium, limite_favoritos=None if premium else LIMITE_FAVORITOS_GRATIS
+    )
 
 
 def _ativar_premium(db: Session, sessao: dict) -> None:

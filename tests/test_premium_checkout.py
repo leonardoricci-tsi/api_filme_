@@ -83,9 +83,11 @@ def test_status_premium(client, db_session):
     db_session.commit()
 
     assert client.get("/premium/status", headers=auth_headers(criar_token(usuario_id=79))).json() == {
-        "premium": True
+        "premium": True,
+        "limite_favoritos": None,
     }
     # Sem linha em `assinaturas` = usuário comum.
     assert client.get("/premium/status", headers=auth_headers(criar_token(usuario_id=80))).json() == {
-        "premium": False
+        "premium": False,
+        "limite_favoritos": 5,
     }

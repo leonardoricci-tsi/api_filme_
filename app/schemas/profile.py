@@ -19,4 +19,6 @@ class PerfilOut(BaseModel):
     # Pro front decidir se mostra o botão de editar. É só interface: quem
     # garante a regra é o 403 do PATCH.
     eh_meu: bool
+    # Selo do plano premium (atividade 7) — aparece pra quem visita também.
+    premium: bool
     favoritos: list[FavoriteOut]
