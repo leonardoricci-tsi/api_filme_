@@ -1,5 +1,7 @@
 # Catálogo de Filmes — Tom Hanks (multi-tenant)
 
+> **Este projeto continua em [github.com/leonardoricci-tsi/ProvaPronta](https://github.com/leonardoricci-tsi/ProvaPronta)** (atividade 9: o catálogo de filmes virou um SaaS). Este repositório fica como está, como evidência da P1.
+
 [![CI/CD](https://github.com/leonardoricci-tsi/api_filme_/actions/workflows/ci.yml/badge.svg)](https://github.com/leonardoricci-tsi/api_filme_/actions/workflows/ci.yml)
 
 > Atividade da disciplina, proposta pelo professor [@siriani](https://github.com/siriani).
